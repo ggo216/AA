@@ -29,15 +29,9 @@ exports.handler = async (event, context) => {
     return { statusCode: 413, body: JSON.stringify({ error: '저장 데이터가 너무 큽니다 (5MB 제한).' }) };
   }
 
-  const store = getStore({ name: 'eldria-saves', consistency: 'strong' });
-  const key = `${user.sub}/${slotId}`;
-
-  try {
-    await store.set(key, data, {
-      metadata: { updatedAt: new Date().toISOString(), userEmail: user.email || '' }
-    });
-    return { statusCode: 200, body: JSON.stringify({ ok: true, updatedAt: new Date().toISOString() }) };
-  } catch (e) {
-    return { statusCode: 500, body: JSON.stringify({ error: '저장 중 오류가 발생했습니다.', detail: String(e) }) };
-  }
-};
+  // 일부 배포 환경에서는 Netlify Blobs의 자동 컨텍스트 주입(NETLIFY_BLOBS_CONTEXT)이
+  // 안 되는 경우가 있어(MissingBlobsEnvironmentError), siteID/token 환경변수가 설정돼
+  // 있으면 수동으로 넘겨준다. Site configuration > Environment variables에
+  // BLOBS_SITE_ID(사이트 ID)와 BLOBS_TOKEN(Personal Access Token)을 등록해두면 된다.
+  const storeOpts = { name: 'eldria-saves', consistency: 'strong' };
+  if (process.env.BLOBS_SITE_ID && process

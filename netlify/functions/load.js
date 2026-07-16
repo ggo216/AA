@@ -14,7 +14,13 @@ exports.handler = async (event, context) => {
   const params = event.queryStringParameters || {};
   const slotId = params.slotId;
 
-  const store = getStore({ name: 'eldria-saves', consistency: 'strong' });
+  // save.js와 동일한 이유로, 자동 컨텍스트 주입이 안 되는 환경을 위해 환경변수가 있으면 수동 전달한다.
+  const storeOpts = { name: 'eldria-saves', consistency: 'strong' };
+  if (process.env.BLOBS_SITE_ID && process.env.BLOBS_TOKEN) {
+    storeOpts.siteID = process.env.BLOBS_SITE_ID;
+    storeOpts.token = process.env.BLOBS_TOKEN;
+  }
+  const store = getStore(storeOpts);
 
   try {
     if (slotId) {
@@ -26,11 +32,4 @@ exports.handler = async (event, context) => {
       return { statusCode: 200, body: JSON.stringify({ ok: true, data: value, meta: metadata ? metadata.metadata : null }) };
     } else {
       // 슬롯 목록 조회
-      const { blobs } = await store.list({ prefix: `${user.sub}/` });
-      const slots = blobs.map(b => ({ key: b.key.split('/').slice(1).join('/') }));
-      return { statusCode: 200, body: JSON.stringify({ ok: true, slots }) };
-    }
-  } catch (e) {
-    return { statusCode: 500, body: JSON.stringify({ error: '불러오기 중 오류가 발생했습니다.', detail: String(e) }) };
-  }
-};
+      const { blobs } = await store.list({ prefix: `${user

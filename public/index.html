@@ -288,6 +288,8 @@
   .skill-track{height:4px;background:var(--bg-inset);border-radius:4px;overflow:hidden;border:1px solid var(--border-soft);margin-bottom:4px;}
   .skill-track-fill{height:100%;background:linear-gradient(90deg,#3d7ac2,#6db8f2);}
   .skill-effect{font-size:9.5px;color:var(--text-dim);margin-bottom:4px;}
+  .farm-plot-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:8px;margin-top:8px;}
+  .farm-plot-card{background:var(--bg-inset);border:1px solid var(--border-soft);border-left-width:3px;border-radius:8px;padding:7px 8px;min-width:0;}
   .skill-tier-tabs{display:flex;gap:5px;margin-bottom:8px;flex-wrap:wrap;}
   .skill-tier-tabs button{font-size:10.5px;padding:4px 9px;border-radius:8px;border:1px solid var(--border-soft);background:var(--bg-panel-light);color:var(--text-main);cursor:pointer;}
   .skill-tier-tabs button.active{background:var(--gold-dim);color:#0d1420;font-weight:700;}
@@ -643,6 +645,7 @@
     <button class="tab-btn" data-tab="pvp"><svg class="nav-icon" viewBox="0 0 24 24" fill="none"><path d="M4 4L11 11M20 4L13 11" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M4 20L11 13M20 20L13 13" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="12" cy="12" r="2.2" fill="currentColor"/></svg>PvP</button>
     <button class="tab-btn" data-tab="mining"><svg class="nav-icon" viewBox="0 0 24 24" fill="none"><path d="M5 21L10 9L14 9L19 21" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M8 21H16" stroke="currentColor" stroke-width="1.8"/><circle cx="12" cy="5" r="2.2" stroke="currentColor" stroke-width="1.6"/></svg>광산<span class="nav-badge hidden" id="miningBadge"></span></button>
     <button class="tab-btn" data-tab="fishing"><svg class="nav-icon" viewBox="0 0 24 24" fill="none"><path d="M4 14C4 14 8 9 13 9C18 9 21 12 21 12" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M13 9L13 4M13 4L11 6M13 4L15 6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><circle cx="6.5" cy="13.2" r="1" fill="currentColor"/></svg>낚시</button>
+    <button class="tab-btn" data-tab="farm"><svg class="nav-icon" viewBox="0 0 24 24" fill="none"><path d="M12 21V10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M12 14C12 14 6 13.5 6 8.5C6 8.5 12 8 12 14Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M12 11C12 11 18 10.5 18 5.5C18 5.5 12 5 12 11Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M4 21H20" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>농장<span class="nav-badge hidden" id="farmBadge"></span></button>
     <button class="tab-btn" data-tab="inv"><svg class="nav-icon" viewBox="0 0 24 24" fill="none"><rect x="3.5" y="8" width="17" height="12" rx="1.5" stroke="currentColor" stroke-width="1.8"/><path d="M8 8V6.5C8 5.1 9.1 4 10.5 4H13.5C14.9 4 16 5.1 16 6.5V8" stroke="currentColor" stroke-width="1.8"/></svg>가방</button>
   </div>
   </div>
@@ -760,6 +763,18 @@
           <button class="btn btn-secondary" id="buyPetClothesBtn" style="flex:1;">옷 상자 (골드 4,000)</button>
         </div>
       </div>
+    </div>
+  </div>
+
+  <!-- FARM TAB -->
+  <div id="tab-farm" class="tab-content hidden">
+    <div class="panel">
+      <div class="skill-tier-tabs" id="farmSubTabs">
+        <button data-farmsub="farm" class="active">농장</button>
+        <button data-farmsub="ranch">사육장</button>
+      </div>
+      <div id="farmSubFarm" class="pet-subpanel"></div>
+      <div id="farmSubRanch" class="pet-subpanel hidden"></div>
     </div>
   </div>
 
@@ -1224,7 +1239,9 @@ const SLOTS = [
   { key:'ring2',    label:'반지2',  itemType:'ring',     pool:['luk','str'] },
   { key:'shoes',    label:'신발',   itemType:'shoes',    pool:['agi','vit'] },
   { key:'cloak',    label:'망토',   itemType:'cloak',    pool:['agi','vit'] },
-  { key:'medal',    label:'훈장',   itemType:'medal',    pool:['str','agi','vit','int','luk'] }
+  { key:'medal',    label:'훈장',   itemType:'medal',    pool:['str','agi','vit','int','luk'] },
+  { key:'badge',    label:'레이드 뱃지', itemType:'badge', pool:['str','agi','vit','int','luk'] },
+  { key:'title',    label:'칭호',   itemType:'title',    pool:['str','agi','vit','int','luk'] }
 ];
 const ALL_ITEM_TYPES = ['weapon','weapon','offhand','hat','eyewear','necklace','earring','top','bottom','gloves','belt','bracelet','ring','ring','shoes','cloak'];
 const SLOT_ICON_SVG = {
@@ -1245,6 +1262,8 @@ const SLOT_ICON_SVG = {
   shoes:   '<svg class="slot-icon" viewBox="0 0 24 24" fill="none"><path d="M4 15V8C4 7 4.7 6 6 6C7 6 7.3 6.7 8.2 7.3C9.5 8.2 11 8.7 13 9L19 11C20.2 11.4 21 12.5 21 13.8V16H4V15Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M4 16H21" stroke="currentColor" stroke-width="1.5"/></svg>',
   cloak:   '<svg class="slot-icon" viewBox="0 0 24 24" fill="none"><path d="M12 3L6 6L4 20H20L18 6L12 3Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M9 6C9 7.5 10.3 8.5 12 8.5C13.7 8.5 15 7.5 15 6" stroke="currentColor" stroke-width="1.5"/></svg>',
   medal:   '<svg class="slot-icon" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="14" r="5.5" stroke="currentColor" stroke-width="1.7"/><path d="M9.5 3L11 9M14.5 3L13 9" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M10.3 13L11.6 14.3L14 11.7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  badge:   '<svg class="slot-icon" viewBox="0 0 24 24" fill="none"><path d="M12 3L14.5 8.5L20.5 9.3L16 13.3L17.2 19.3L12 16.2L6.8 19.3L8 13.3L3.5 9.3L9.5 8.5L12 3Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>',
+  title:   '<svg class="slot-icon" viewBox="0 0 24 24" fill="none"><path d="M4 6H20" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M4 6C4 11 7 12.5 7 12.5C7 12.5 4 15 4 19" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M20 6C20 11 17 12.5 17 12.5C17 12.5 20 15 20 19" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M4 19H20" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>',
   default: '<svg class="slot-icon" viewBox="0 0 24 24" fill="none"><rect x="5" y="5" width="14" height="14" rx="2" stroke="currentColor" stroke-width="1.6"/></svg>'
 };
 const ARMOR_NAMES = {
@@ -1259,7 +1278,9 @@ const ARMOR_NAMES = {
   bracelet: { common:'낡은 팔찌', rare:'마력 팔찌', epic:'정령의 팔찌', legendary:'시간의 팔찌' },
   ring:     { common:'낡은 반지', rare:'마력의 반지', epic:'용의 인장 반지', legendary:'무한의 반지' },
   shoes:    { common:'낡은 신발', rare:'가죽 부츠', epic:'바람의 부츠', legendary:'질풍의 장화' },
-  cloak:    { common:'낡은 망토', rare:'여행자의 망토', epic:'그림자 망토', legendary:'용의 날개 망토' }
+  cloak:    { common:'낡은 망토', rare:'여행자의 망토', epic:'그림자 망토', legendary:'용의 날개 망토' },
+  badge:    { common:'수습의 레이드 뱃지', rare:'정예의 레이드 뱃지', epic:'영웅의 레이드 뱃지', legendary:'전설의 레이드 뱃지' },
+  title:    { common:'초보 사냥꾼의 칭호', rare:'보스 사냥꾼의 칭호', epic:'재앙의 정복자 칭호', legendary:'세계의 종결자 칭호' }
 };
 function baseNameFor(table, key, rarityKey){
   if(rarityKey === 'mythic') return '신화의 ' + table[key].legendary;
@@ -1895,6 +1916,34 @@ function skillEnhanceCost(key){
 }
 const SKILL_ENHANCE_DMG_PER_LEVEL = 0.04; // 강화 1레벨당 추가 데미지 보너스 4%
 function skillEnhanceDmgMult(key){ return 1 + skillEnhanceLevel(key) * SKILL_ENHANCE_DMG_PER_LEVEL; }
+// [신규] 5차 스킬(tier:5) 전용 젬스톤 강화 시스템. SP 레벨업과는 별개로, 몬스터 처치로 얻는 "젬스톤" 재화를 소모해
+// tier:5 스킬의 효과(공격/버프/힐 배율 및 패시브 스탯)를 소폭 추가로 강화한다. 젬스톤 강화는 스킬 SP 레벨과 무관하게 진행 가능.
+const GEM_ENHANCE_MAX_LEVEL = 20;
+const GEM_ENHANCE_BONUS_PER_LEVEL = 0.02; // 강화 1레벨당 효과 +2%
+function isTier5SkillKey(key){
+  const def = SKILL_DEFS[key];
+  return !!(def && def.tier===5);
+}
+function gemEnhanceLevel(key){ return (state.skillGemEnhance && state.skillGemEnhance[key]) || 0; }
+function gemEnhanceCost(key){
+  const lv = gemEnhanceLevel(key);
+  // 레벨업당 필요한 젬스톤 소모량이 점점 늘어남
+  return 5 + lv * 3;
+}
+function gemEnhanceBonusMult(key){ return 1 + gemEnhanceLevel(key) * GEM_ENHANCE_BONUS_PER_LEVEL; }
+function gemEnhanceSkill(key){
+  if(!isTier5SkillKey(key)){ showToast('5차 스킬만 젬스톤으로 강화할 수 있습니다', true); return; }
+  const lv = gemEnhanceLevel(key);
+  if(lv >= GEM_ENHANCE_MAX_LEVEL){ showToast('이미 젬스톤 강화 최대 레벨입니다', true); return; }
+  const cost = gemEnhanceCost(key);
+  if((state.gemstones||0) < cost){ showToast(`젬스톤이 부족합니다 (필요 ${cost}개 · 보유 ${state.gemstones||0}개)`, true); return; }
+  state.gemstones -= cost;
+  if(!state.skillGemEnhance) state.skillGemEnhance = {};
+  state.skillGemEnhance[key] = lv + 1;
+  const def = SKILL_DEFS[key];
+  showToast(`${def?def.name:key} 젬스톤 강화! (강화 Lv.${state.skillGemEnhance[key]} · 효과 +${Math.round((gemEnhanceBonusMult(key)-1)*100)}%)`);
+  renderAll();
+}
 function enhanceTier4Skill(key){
   if(!isTier4SkillKey(key)){ showToast('4차 전직 액티브 스킬만 추가 강화할 수 있습니다', true); return; }
   const def = SKILL_DEFS[key];
@@ -2266,7 +2315,7 @@ JOB_RANK_REQS[4] = { level:120, bossId:'b4', gold:150000, label:'4차 전직' };
    레이드/월드보스에서만 효과가 크게 강화되는 자기 버프·자기 강화 공격으로 단순화했다.
    ============================================================= */
 let RAID_CONTEXT_ACTIVE = false; // runRaidChunk / simulatePartyMemberOffline 실행 중에만 true로 설정됨
-function raidCoopMult(){ return RAID_CONTEXT_ACTIVE ? 1.6 : 1; } // 레이드/월드보스 전투 중에는 협동 스킬 효과 1.6배
+function raidCoopMult(){ return 1; } // [수정] 협동 스킬(5차) 잔재 배율(1.6배) 제거 - 모든 5차 스킬이 동등하게 계산되도록 함. RAID_CONTEXT_ACTIVE 플래그 자체는 다른 용도로 유지.
 function buildTier5Skills(){
   const tier = 5, reqRank = 4;
   const UNLOCK_LV = [130,133,136,139,142,145,148,151,154,157,160];
@@ -2279,9 +2328,19 @@ function buildTier5Skills(){
   const coopAtkM  = (lv)=>(0.5+0.13*(lv-1))*raidCoopMult();
 
   function def(jobKey, id, name, rankLabel, opts){
-    SKILL_DEFS[`${jobKey}_${id}`] = Object.assign({
+    const key = `${jobKey}_${id}`;
+    // [젬스톤 강화 연동] mult/buffMult/healPct/statAmt 함수를 감싸서, 젬스톤 강화(gemEnhanceSkill)로 쌓은
+    // 추가 보너스(gemEnhanceBonusMult)가 SP 레벨 효과 위에 곱연산으로 소폭 추가되도록 한다.
+    const wrapped = Object.assign({}, opts);
+    ['mult','buffMult','healPct','statAmt'].forEach(fnKey=>{
+      if(typeof opts[fnKey] === 'function'){
+        const orig = opts[fnKey];
+        wrapped[fnKey] = (lv)=> orig(lv) * gemEnhanceBonusMult(key);
+      }
+    });
+    SKILL_DEFS[key] = Object.assign({
       name, job:jobKey, tier, reqRank, maxLevel:10
-    }, opts, { desc: `[${rankLabel}] ${opts.desc}` });
+    }, wrapped, { desc: `[${rankLabel}] ${opts.desc}` });
   }
   function passiveStat(jobKey, id, name, rankLabel, statKey, per, unlockLv, descExtra){
     def(jobKey, id, name, rankLabel, {
@@ -2300,11 +2359,15 @@ function buildTier5Skills(){
     });
   }
   function activeDmg(jobKey, id, name, rankLabel, unlockLv, manaCost, cooldown, multFn, aoe, dmgType, descExtra){
+    // [버그 수정] effectText가 클로저로 캡처한 원본 multFn을 직접 호출하면, 이후 전역 하향 패치
+    // (ACTIVE_SKILL_DMG_MULT)가 def.mult 프로퍼티만 재할당하므로 effectText 표시값에는 반영되지 않는다.
+    // 따라서 effectText는 항상 SKILL_DEFS에 등록된 "현재 시점의" def.mult를 참조하도록 만든다.
+    const skillKey = `${jobKey}_${id}`;
     def(jobKey, id, name, rankLabel, {
       kind:'active', unlockLv, manaCost, cooldown, aoe: !!aoe, dmgType,
       desc: `마나를 소모해 ${aoe?'광역 ':''}강력한 피해를 입힙니다.${aoe?' 사냥 중에는 다음 몬스터에게도 피해가 전이됩니다.':''}${descExtra?(' '+descExtra):''}`,
       mult: multFn,
-      effectText:(lv)=> lv===0?'미보유':`쿨타임 ${cooldown}턴 · ${aoe?'광역':'단일'}피해 ATK의 ${Math.round(multFn(lv)*100)}%`
+      effectText:(lv)=> lv===0?'미보유':`쿨타임 ${cooldown}턴 · ${aoe?'광역':'단일'}피해 ATK의 ${Math.round((SKILL_DEFS[skillKey].mult)(lv)*100)}%`
     });
   }
   function activeHeal(jobKey, id, name, rankLabel, unlockLv, manaCost, cooldown, healFn, descExtra){
@@ -2466,7 +2529,7 @@ function freshState(){
     autoPotionMana: 'manaCommon',
     statBuffs: { str:0, agi:0, vit:0, int:0, luk:0 },
     allStatBuffUntil: 0,
-    equipment: { weapon:null, offhand:null, hat:null, eyewear:null, necklace:null, earring:null, top:null, bottom:null, gloves:null, belt:null, bracelet:null, ring1:null, ring2:null, shoes:null, cloak:null, medal:null },
+    equipment: { weapon:null, offhand:null, hat:null, eyewear:null, necklace:null, earring:null, top:null, bottom:null, gloves:null, belt:null, bracelet:null, ring1:null, ring2:null, shoes:null, cloak:null, medal:null, badge:null, title:null },
     inventory: [],
     pets: [],
     equippedPets: [],
@@ -2492,6 +2555,9 @@ function freshState(){
     },
     skills: defaultSkillLevels(),
     skillEnhance: {},
+    gemstones: 0, // [신규] 몬스터 처치 시 낮은 확률로 드랍되는 재료. 5차 스킬 전용 강화(gemEnhanceSkill)에 소모된다.
+    skillGemEnhance: {}, // [신규] 5차 스킬(tier:5) 전용 젬스톤 강화 레벨 저장: { skillKey: gemEnhanceLevel }
+    expBoostUntil: 0, // [신규] 농장 특수 보상으로 얻는 "경험치 3배" 버프의 만료 시각(ms). gainExp()에서 이 시각 이전이면 획득 경험치를 3배로 계산한다.
     cubeUsedOnce: false,
     skillPriority: {},
     bossProgress: {},
@@ -2515,6 +2581,22 @@ function freshState(){
       essence: { normal:0, radiant:0, blessed:0 }, // 정령의 힘 / 찬란한 정령의 힘 / 축복받은 정령의 힘 (레이드 전용 소모 재화)
       bossRuneBag: [], // 미장착 보스룬석
       bossRuneEquipped: [null, null, null] // 캐릭터당 최대 3개 장착
+    },
+    // [신규] 농장: 던전 드롭 재료(나무/벽돌/씨앗/물)로 무한 강화. 보상형 식물/나무는 초당 골드/경험치/보석을 pending*에 누적하며 언제든 harvestFarm()으로 수거한다.
+    farm: {
+      level: 1,          // 농장 레벨. farmPlotCapacity()로 심을 수 있는 슬롯 수를 결정. upgradeFarmLevel()로 재료 소모하여 무한 강화.
+      plots: [],          // 심어진 식물/나무: { id, kind:'crop'|'tree', typeKey(FARM_CROP_DEFS/FARM_TREE_DEFS 키), rarityKey, plantedAt }
+      pendingGold: 0, pendingExp: 0, pendingGems: 0, // 누적된 미수거 보상 (harvestFarm()으로 정산)
+      lastTickAt: Date.now(), // 마지막 생산 계산 시각(계산 최적화용). tickFarmProduction()이 이 시각부터 현재까지 경과한 구간만큼만 추가 누적한다
+      lastHarvestAt: Date.now(), // [신규] 마지막 수거 시각. farmMaxAccrualSec(level) 상한 판정은 반드시 이 시각을 기준으로 한다 (수거 후에만 초기화됨)
+      materials: { wood:{}, brick:0, seed:{}, water:0 } // wood/seed는 종류별 개수 객체(FARM_WOOD_TYPES/FARM_SEED_TYPES 키), brick/water는 단일 카운터
+    },
+    // [신규] 사육장: 벽돌로 무한 강화. 동물은 던전 드롭 '동물 주문서'로 랜덤 획득(rollAnimalScroll()), 등급별 능력치 차등.
+    ranch: {
+      level: 0,           // 사육장 강화 레벨. ranchCapacity()로 배치 가능 동물 수, 보상 보너스% 결정. upgradeRanch()로 벽돌 소모하여 무한 강화.
+      animals: [],         // 보유 동물 전체(배치/미배치 포함): { id, kind:'chicken'|'pig'|'cow', rarityKey, placed:bool, placedAt }
+      pendingGold: 0, pendingExp: 0, pendingGems: 0,
+      lastTickAt: Date.now()
     }
   };
 }
@@ -2655,6 +2737,33 @@ function normalizeState(data){
     merged.expedition.essence.normal = (merged.expedition.essence.normal || 0) + data.spiritPower;
   }
   merged.spiritPower = 0;
+  // [신규] 농장/사육장 데이터 마이그레이션: 구세이브(농장 도입 이전)에는 필드가 없으므로 안전하게 기본값을 채운다.
+  const freshFarm = freshState().farm;
+  merged.farm = Object.assign({}, freshFarm, data.farm||{});
+  merged.farm.plots = Array.isArray(merged.farm.plots) ? merged.farm.plots : [];
+  // 구세이브(물 강화 도입 이전)에는 plot.enhanceLevel이 없으므로 0으로 채운다.
+  // 구세이브(특수 보상 드랍 도입 이전)에는 plot.lastSpecialRollAt이 없으므로 심은 시각(plantedAt)으로 채운다.
+  merged.farm.plots.forEach(p=>{
+    if(typeof p.enhanceLevel !== 'number') p.enhanceLevel = 0;
+    if(typeof p.lastSpecialRollAt !== 'number') p.lastSpecialRollAt = p.plantedAt || Date.now();
+  });
+  merged.farm.materials = Object.assign({}, freshFarm.materials, (data.farm&&data.farm.materials)||{});
+  merged.farm.materials.wood = Object.assign({}, (data.farm&&data.farm.materials&&data.farm.materials.wood)||{});
+  merged.farm.materials.seed = Object.assign({}, (data.farm&&data.farm.materials&&data.farm.materials.seed)||{});
+  FARM_WOOD_TYPES.forEach(k=>{ if(typeof merged.farm.materials.wood[k] !== 'number') merged.farm.materials.wood[k] = 0; });
+  FARM_SEED_TYPES.forEach(k=>{ if(typeof merged.farm.materials.seed[k] !== 'number') merged.farm.materials.seed[k] = 0; });
+  merged.farm.materials.brick = merged.farm.materials.brick || 0;
+  merged.farm.materials.water = merged.farm.materials.water || 0;
+  merged.farm.lastTickAt = (data.farm && data.farm.lastTickAt) || Date.now();
+  // [신규] 마지막 수거 시각 마이그레이션: 구세이브(레벨별 최대 적립시간 도입 이전)에는 필드가 없으므로
+  // lastTickAt을 이어받는다 (기존 진행분이 갑자기 캡에 걸려 손해보지 않도록 최대한 보수적으로 처리).
+  merged.farm.lastHarvestAt = (data.farm && data.farm.lastHarvestAt) || merged.farm.lastTickAt || Date.now();
+  merged.expBoostUntil = (data.expBoostUntil) || 0;
+
+  const freshRanch = freshState().ranch;
+  merged.ranch = Object.assign({}, freshRanch, data.ranch||{});
+  merged.ranch.animals = Array.isArray(merged.ranch.animals) ? merged.ranch.animals : [];
+  merged.ranch.lastTickAt = (data.ranch && data.ranch.lastTickAt) || Date.now();
   return merged;
 }
 
@@ -2722,11 +2831,38 @@ let cloudUser = null;
 let lastCloudSaveAt = 0;
 const CLOUD_SAVE_THROTTLE_MS = 3*60*1000; // 클라우드 자동 저장은 최소 3분 간격으로만 (API 남용 방지)
 let cloudSaveInProgress = false;
+// Netlify Identity 위젯 스크립트 자체가 로드되지 않았거나(네트워크 차단 등) 연동 초기화가
+// 예외로 실패한 경우 true로 설정되어, 로그인 버튼을 비활성화하고 사용자에게 안내한다.
+let identityUnavailable = false;
+// cloudSave/cloudLoad가 진행 중인 동안(중첩 호출 포함) 0보다 큰 값을 유지하며, authStatus에
+// "동기화 중..." 표시를 띄우기 위해 사용한다. cloudSaveInProgress(자동저장 쓰로틀 가드)와는
+// 별개의 값으로, 순수하게 UI 표시 목적이다.
+let cloudSyncActiveCount = 0;
+function beginCloudSync(){ cloudSyncActiveCount++; renderAuthUI(); }
+function endCloudSync(){ cloudSyncActiveCount = Math.max(0, cloudSyncActiveCount - 1); renderAuthUI(); }
 
+// 동기화 상태(진행 중/완료)와 로그인 여부, 스크립트 로드 실패 여부를 authStatus/authBtn에
+// 일관되게 반영한다. 동기화 진행 중에는 authBtn을 비활성화해 중복 클릭(중복 요청)을 막는다.
 function renderAuthUI(){
   const authBtn = document.getElementById('authBtn');
   const authStatus = document.getElementById('authStatus');
   if(!authBtn) return;
+  if(identityUnavailable){
+    authBtn.textContent = '로그인(사용불가)';
+    authBtn.disabled = true;
+    if(authStatus){ authStatus.style.display = 'none'; authStatus.textContent = ''; }
+    return;
+  }
+  if(cloudSyncActiveCount > 0){
+    authBtn.disabled = true;
+    if(authStatus){
+      authStatus.style.display = '';
+      authStatus.textContent = '☁ 동기화 중...';
+      authStatus.title = '클라우드와 동기화하고 있습니다';
+    }
+    return;
+  }
+  authBtn.disabled = false;
   if(cloudUser){
     const label = cloudUser.email ? cloudUser.email.split('@')[0] : '동기화';
     authBtn.textContent = '로그아웃';
@@ -2745,6 +2881,7 @@ async function cloudSave(slotId, data){
   if(!window.netlifyIdentity) return false;
   const user = netlifyIdentity.currentUser();
   if(!user || !slotId) return false;
+  beginCloudSync();
   try{
     const token = await user.jwt();
     // 서버(save.js)는 data가 반드시 "문자열"이어야 한다(typeof data !== 'string'이면 400 반환).
@@ -2765,6 +2902,8 @@ async function cloudSave(slotId, data){
   }catch(e){
     console.error('[cloudSave] 예외 발생', { slotId, error: e });
     return false;
+  } finally {
+    endCloudSync();
   }
 }
 
@@ -2773,6 +2912,7 @@ async function cloudLoad(slotId){
   if(!window.netlifyIdentity) return null;
   const user = netlifyIdentity.currentUser();
   if(!user || !slotId) return null;
+  beginCloudSync();
   try{
     const token = await user.jwt();
     const res = await fetch('/.netlify/functions/load?slotId=' + encodeURIComponent(slotId), {
@@ -2798,6 +2938,8 @@ async function cloudLoad(slotId){
   }catch(e){
     console.error('[cloudLoad] 예외 발생', { slotId, error: e });
     return null;
+  } finally {
+    endCloudSync();
   }
 }
 
@@ -2881,6 +3023,25 @@ async function handleCloudLoginSync(){
 if(typeof window !== 'undefined' && !window.netlifyIdentity){
   console.error('[identity] netlifyIdentity 위젯 스크립트가 로드되지 않았습니다 (네트워크 차단/광고차단 확장 프로그램 등을 확인하세요).');
 }
+// 위젯 스크립트가 느린 네트워크 등으로 뒤늦게 로드될 수도 있으므로 즉시 "사용 불가"로
+// 단정하지 않고, DOMContentLoaded 이후 일정 시간(3초)이 지나도 window.netlifyIdentity가
+// 여전히 없으면 그때 로그인 버튼을 비활성화하고 사용자에게 화면으로 안내한다.
+function scheduleIdentityAvailabilityCheck(){
+  setTimeout(()=>{
+    if(typeof window !== 'undefined' && !window.netlifyIdentity){
+      console.error('[identity] 3초 대기 후에도 netlifyIdentity 위젯을 사용할 수 없습니다. 로그인 버튼을 비활성화합니다.');
+      identityUnavailable = true;
+      renderAuthUI();
+    }
+  }, 3000);
+}
+if(typeof document !== 'undefined'){
+  if(document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', scheduleIdentityAvailabilityCheck);
+  } else {
+    scheduleIdentityAvailabilityCheck();
+  }
+}
 // [중요] 아래 netlifyIdentity 연동 코드 전체를 try/catch로 감싼다.
 // 카카오톡 인앱 브라우저 등 제한된 모바일 WebView에서는 netlify-identity-widget이
 // window.netlifyIdentity 객체 자체는 만들어놓고도(스크립트 로드는 됨) 내부적으로
@@ -2927,7 +3088,13 @@ if(typeof window !== 'undefined' && window.netlifyIdentity){
     netlifyIdentity.init();
   }catch(e){
     console.error('[identity] netlifyIdentity 연동 초기화 실패 (모바일 인앱 브라우저 등에서 발생 가능) - 로그인 기능만 비활성화되고 나머지 기능은 정상 동작합니다', e);
+    identityUnavailable = true;
+    renderAuthUI();
   }
+} else if(typeof window !== 'undefined' && !window.netlifyIdentity){
+  // 위 scheduleIdentityAvailabilityCheck()가 3초 뒤 최종 판단을 내리지만, 여기서도
+  // 초기 렌더링 시점의 authBtn 상태가 어색하게 남지 않도록 한 번 더 그려준다.
+  renderAuthUI();
 }
 
 /* =============================================================
@@ -2949,6 +3116,397 @@ function smithExpNeeded(lvl){ return 80 + lvl*40; }
 function clamp(v,min,max){ return Math.max(min, Math.min(max, v)); }
 function escapeHtml(str){ return String(str==null?'':str).replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch])); }
 function rarityOf(item){ return RARITY_BY_KEY[item.rarityKey]; }
+
+/* =============================================================
+   FARM & RANCH (농장/사육장) — 데이터 정의
+   던전 드롭 재료(나무/벽돌/씨앗/물/동물 주문서)로 무한 강화 가능한 방치형 생산 콘텐츠.
+   등급 체계는 기존 RARITY_MULT/RARITY_BY_KEY(common/rare/epic/legendary/mythic)를 그대로 재사용한다.
+   ============================================================= */
+const FARM_WOOD_TYPES = ['oak','pine','birch','mahogany','ironwood'];
+const FARM_WOOD_LABEL = { oak:'참나무', pine:'소나무', birch:'자작나무', mahogany:'마호가니', ironwood:'철목' };
+const FARM_SEED_TYPES = ['sunflowerSeed','sageLeafSeed','gemFlowerSeed','strengthRootSeed','vitalityVineSeed'];
+const FARM_SEED_LABEL = { sunflowerSeed:'해바라기씨', sageLeafSeed:'지혜잎씨앗', gemFlowerSeed:'보석꽃씨앗', strengthRootSeed:'力뿌리씨앗', vitalityVineSeed:'생명덩굴씨앗' };
+
+// 작물(crop) 정의: 씨앗(FARM_SEED_TYPES 중 하나)을 소모해 심는다.
+// kind:'reward' -> 초당 골드/경험치/보석을 farm.pending*에 누적 + 농장 전체 보상 보너스%(bonusPct)를 제공
+// kind:'combat'  -> 전투 스탯(statKey)을 statAmt(rarityKey)만큼 영구 제공 (심어져 있는 동안 적용)
+const FARM_CROP_DEFS = {
+  goldBerry:      { name:'황금열매',   kind:'reward', rewardType:'gold', seedType:'sunflowerSeed',
+                    perSecondAmt:(rk)=> Math.round(2 * (RARITY_MULT[rk]||1)), bonusPct:(rk)=> 1 * (RARITY_MULT[rk]||1) },
+  // expLeaf는 rewardType==='exp'이므로 perSecondAmt가 절대치가 아니라 "현재 레벨 경험치 요구량 대비 초당 비율"을 반환한다.
+  // tickFarmProduction()에서 expNeeded(state.level) * perSecondAmt(rarityKey)로 실제 생산량을 계산한다.
+  expLeaf:        { name:'지혜의 잎',  kind:'reward', rewardType:'exp',  seedType:'sageLeafSeed',
+                    perSecondAmt:(rk)=> 0.0006 * (RARITY_MULT[rk]||1), bonusPct:(rk)=> 1 * (RARITY_MULT[rk]||1) },
+  gemFlower:      { name:'보석꽃',     kind:'reward', rewardType:'gem',  seedType:'gemFlowerSeed',
+                    perSecondAmt:(rk)=> Math.max(1, Math.round(0.2 * (RARITY_MULT[rk]||1))), bonusPct:(rk)=> 1.2 * (RARITY_MULT[rk]||1) },
+  strengthRoot:   { name:'力의 뿌리',  kind:'combat', statKey:'str', seedType:'strengthRootSeed',
+                    statAmt:(rk)=> Math.round(2 * (RARITY_MULT[rk]||1)) },
+  vitalityVine:   { name:'생명덩굴',   kind:'combat', statKey:'vit', seedType:'vitalityVineSeed',
+                    statAmt:(rk)=> Math.round(2 * (RARITY_MULT[rk]||1)) }
+};
+
+// 나무(tree) 정의: FARM_WOOD_TYPES 중 하나를 소모해 심는다. crop과 동일한 구조(kind/rewardType|statKey).
+const FARM_TREE_DEFS = {
+  goldenAppleTree:{ name:'황금사과나무', kind:'reward', rewardType:'gold', woodType:'oak',
+                    perSecondAmt:(rk)=> Math.round(3 * (RARITY_MULT[rk]||1)), bonusPct:(rk)=> 1.5 * (RARITY_MULT[rk]||1) },
+  // wisdomTree도 expLeaf와 동일하게 "현재 레벨 경험치 요구량 대비 초당 비율"을 반환한다 (절대치 아님).
+  wisdomTree:     { name:'지혜의 나무', kind:'reward', rewardType:'exp',  woodType:'pine',
+                    perSecondAmt:(rk)=> 0.00088 * (RARITY_MULT[rk]||1), bonusPct:(rk)=> 1.5 * (RARITY_MULT[rk]||1) },
+  gemstoneTree:   { name:'보석나무',   kind:'reward', rewardType:'gem',  woodType:'mahogany',
+                    perSecondAmt:(rk)=> Math.max(1, Math.round(0.3 * (RARITY_MULT[rk]||1))), bonusPct:(rk)=> 1.8 * (RARITY_MULT[rk]||1) },
+  ironbarkTree:   { name:'철목나무',   kind:'combat', statKey:'atk', woodType:'ironwood',
+                    statAmt:(rk)=> Math.round(3 * (RARITY_MULT[rk]||1)) },
+  agileBirch:     { name:'날렵한 자작나무', kind:'combat', statKey:'agi', woodType:'birch',
+                    statAmt:(rk)=> Math.round(2.5 * (RARITY_MULT[rk]||1)) }
+};
+
+// 사육장 동물 정의: 닭=골드, 돼지=경험치, 소=보석을 초당 생산. 등급별 baseAmt 배율 차등.
+const FARM_ANIMAL_DEFS = {
+  chicken: { name:'닭', rewardType:'gold', baseAmt:(rk)=> Math.round(2.5 * (RARITY_MULT[rk]||1)) },
+  // pig도 rewardType==='exp'이므로 baseAmt는 "현재 레벨 경험치 요구량 대비 초당 비율"을 반환한다 (절대치 아님).
+  pig:     { name:'돼지', rewardType:'exp', baseAmt:(rk)=> 0.00072 * (RARITY_MULT[rk]||1) },
+  cow:     { name:'소', rewardType:'gem', baseAmt:(rk)=> Math.max(1, Math.round(0.25 * (RARITY_MULT[rk]||1))) }
+};
+const FARM_ANIMAL_KEYS = Object.keys(FARM_ANIMAL_DEFS);
+// 농장/사육장의 오프라인 생산 계산 시, 너무 오랜 기간 방치되었을 때 한 번에 비정상적으로 큰 값이 쌓이는 것을
+// 막기 위한 안전 상한(초 단위). 30일 = 2,592,000초. "언제든 수거 가능"이라는 요구를 살리기 위해 넉넉하게 잡는다.
+const FARM_MAX_OFFLINE_SEC = 30*24*3600;
+
+/* =============================================================
+   FARM & RANCH — 핵심 로직 함수
+   ============================================================= */
+// 농장 레벨에 따른 심을 수 있는 슬롯(작물+나무 합산) 수.
+function farmPlotCapacity(){ return 2 + (state.farm.level||1); }
+// 씨앗 총합/나무 총합 등 종류별 객체를 합산.
+function sumFarmMaterialPool(poolObj){ return Object.values(poolObj||{}).reduce((a,b)=>a+(b||0), 0); }
+// 종류별 재료 풀에서 합계 amount만큼 그리디하게(많이 보유한 종류부터) 소모. 사전에 sumFarmMaterialPool로 충분한지 확인 후 호출할 것.
+function consumeFarmMaterialPool(poolObj, amount){
+  let remain = amount;
+  Object.keys(poolObj).sort((a,b)=> (poolObj[b]||0)-(poolObj[a]||0)).forEach(k=>{
+    if(remain<=0) return;
+    const take = Math.min(poolObj[k]||0, remain);
+    poolObj[k] -= take; remain -= take;
+  });
+  return remain<=0;
+}
+// 농장 레벨업에 필요한 재료량(레벨이 오를수록 증가하는 무한 강화 공식).
+function farmUpgradeCost(level){
+  const lvl = level||1;
+  return { wood: 5+lvl*3, brick: 2+lvl*2, seed: 5+lvl*2, water: 10+lvl*5 };
+}
+// 나무+벽돌+씨앗+물을 소모해 농장 레벨업 (무한 강화). 성공 시 true 반환.
+function upgradeFarmLevel(){
+  const farm = state.farm;
+  const cost = farmUpgradeCost(farm.level);
+  const haveWood = sumFarmMaterialPool(farm.materials.wood);
+  const haveSeed = sumFarmMaterialPool(farm.materials.seed);
+  if(haveWood < cost.wood || (farm.materials.brick||0) < cost.brick || haveSeed < cost.seed || (farm.materials.water||0) < cost.water){
+    return { ok:false, cost };
+  }
+  consumeFarmMaterialPool(farm.materials.wood, cost.wood);
+  consumeFarmMaterialPool(farm.materials.seed, cost.seed);
+  farm.materials.brick -= cost.brick;
+  farm.materials.water -= cost.water;
+  farm.level += 1;
+  return { ok:true, cost };
+}
+// seedType(FARM_SEED_TYPES 키)에 해당하는 작물을 심는다. 씨앗 1개 + 물 2개 소모. 등급은 심는 시점에 rollRarity()로 무작위 부여.
+function plantCrop(seedType){
+  const farm = state.farm;
+  if(farm.plots.length >= farmPlotCapacity()) return { ok:false, reason:'슬롯 부족' };
+  const typeKey = Object.keys(FARM_CROP_DEFS).find(k=> FARM_CROP_DEFS[k].seedType===seedType);
+  if(!typeKey) return { ok:false, reason:'알 수 없는 씨앗' };
+  if((farm.materials.seed[seedType]||0) < 1) return { ok:false, reason:'씨앗 부족' };
+  if((farm.materials.water||0) < 2) return { ok:false, reason:'물 부족' };
+  farm.materials.seed[seedType] -= 1;
+  farm.materials.water -= 2;
+  const rarityKey = rollRarity(0).key;
+  const plot = { id:uid(), kind:'crop', typeKey, rarityKey, plantedAt:Date.now(), enhanceLevel:0, lastSpecialRollAt:Date.now() };
+  farm.plots.push(plot);
+  return { ok:true, plot };
+}
+// woodType(FARM_WOOD_TYPES 키)에 해당하는 나무를 심는다. 나무 1개 + 물 3개 소모. 등급은 심는 시점에 rollRarity()로 무작위 부여.
+function plantTree(woodType){
+  const farm = state.farm;
+  if(farm.plots.length >= farmPlotCapacity()) return { ok:false, reason:'슬롯 부족' };
+  const typeKey = Object.keys(FARM_TREE_DEFS).find(k=> FARM_TREE_DEFS[k].woodType===woodType);
+  if(!typeKey) return { ok:false, reason:'알 수 없는 나무 종류' };
+  if((farm.materials.wood[woodType]||0) < 1) return { ok:false, reason:'나무 부족' };
+  if((farm.materials.water||0) < 3) return { ok:false, reason:'물 부족' };
+  farm.materials.wood[woodType] -= 1;
+  farm.materials.water -= 3;
+  const rarityKey = rollRarity(0).key;
+  const plot = { id:uid(), kind:'tree', typeKey, rarityKey, plantedAt:Date.now(), enhanceLevel:0, lastSpecialRollAt:Date.now() };
+  farm.plots.push(plot);
+  return { ok:true, plot };
+}
+// 심어진 식물/나무를 제거(재배치용). 소모한 재료는 반환하지 않는다.
+function removeFarmPlot(plotId){
+  const farm = state.farm;
+  const idx = farm.plots.findIndex(p=>p.id===plotId);
+  if(idx<0) return false;
+  farm.plots.splice(idx,1);
+  return true;
+}
+// 강화 레벨에 따른 물 소모량(무한 강화, 레벨이 오를수록 지수적으로 증가).
+function plotEnhanceCost(plot){
+  const lvl = (plot && plot.enhanceLevel) || 0;
+  return Math.round(3 * Math.pow(1.15, lvl));
+}
+// 물을 소모해 특정 plot(작물/나무)을 강화한다(무한 강화, 상한 없음). 강화 1레벨당 생산량/전투스탯 +5%.
+function enhanceFarmPlot(plotId){
+  const farm = state.farm;
+  const plot = farm.plots.find(p=>p.id===plotId);
+  if(!plot) return { ok:false, reason:'대상을 찾을 수 없음' };
+  const cost = plotEnhanceCost(plot);
+  if((farm.materials.water||0) < cost) return { ok:false, reason:'물 부족', cost };
+  farm.materials.water -= cost;
+  plot.enhanceLevel = (plot.enhanceLevel||0) + 1;
+  return { ok:true, plot, cost };
+}
+// 보상형(kind:'reward') 작물/나무들의 농장 전체 보상 보너스%(합산). 생산량 계산 시 곱연산으로 적용.
+function farmRewardBonusPct(){
+  let total = 0;
+  state.farm.plots.forEach(p=>{
+    const def = p.kind==='crop' ? FARM_CROP_DEFS[p.typeKey] : FARM_TREE_DEFS[p.typeKey];
+    if(def && def.kind==='reward') total += def.bonusPct(p.rarityKey);
+  });
+  return total;
+}
+// 전투형(kind:'combat') 작물/나무들이 제공하는 스탯 보너스 합계. { str:.., atk:.. } 형태로 반환.
+// computeTotals() 등 전투 스탯 합산 로직에서 이 값을 더해 사용하도록 다음 단계(전투 연동) 에이전트가 통합할 것.
+function farmCombatStatBonuses(){
+  const bonus = {};
+  state.farm.plots.forEach(p=>{
+    const def = p.kind==='crop' ? FARM_CROP_DEFS[p.typeKey] : FARM_TREE_DEFS[p.typeKey];
+    if(def && def.kind==='combat'){
+      const enhanceMult = 1 + (p.enhanceLevel||0) * 0.05;
+      bonus[def.statKey] = (bonus[def.statKey]||0) + def.statAmt(p.rarityKey) * enhanceMult;
+    }
+  });
+  return bonus;
+}
+// [신규] 농장 레벨별 "마지막 수거 이후 최대 적립 가능 시간"(초). 레벨이 오를수록 늘어나며 상한은 없다.
+// 레벨1 = 1시간, 이후 레벨당 12%씩 복리로 증가 (예: Lv10≈2.77시간, Lv30≈27.9시간, Lv50≈281시간).
+function farmMaxAccrualSec(level){
+  const lvl = Math.max(1, level||1);
+  return Math.round(3600 * Math.pow(1.12, lvl-1));
+}
+// lastTickAt부터 현재까지 경과 시간만큼 보상형 plots의 생산량을 pending*에 누적한다. (오프라인 캐치업 포함, FARM_MAX_OFFLINE_SEC로 절대 상한)
+// [신규] 추가로 "마지막 수거(lastHarvestAt) 이후 경과 시간"이 farmMaxAccrualSec(level)을 넘으면 그 이상은 더 누적되지 않는다
+// (수거를 자주 할수록 손해가 없고, 방치를 오래 할수록 레벨이 낮은 농장은 더 일찍 적립이 멈추는 구조).
+// 게임 루프에서 주기적으로 호출하거나, 화면 진입/저장 시점에 호출해 최신 상태로 갱신한다.
+function tickFarmProduction(){
+  const farm = state.farm;
+  const now = Date.now();
+  if(!farm.lastHarvestAt) farm.lastHarvestAt = farm.lastTickAt || now;
+  const maxAccrualSec = farmMaxAccrualSec(farm.level);
+  // 이번 틱 구간([lastTickAt, now])을 "수거 이후 경과 시간" 기준으로 캡 안쪽 구간만 잘라낸다.
+  const prevSinceHarvestSec = clamp(((farm.lastTickAt||now) - farm.lastHarvestAt)/1000, 0, maxAccrualSec);
+  const curSinceHarvestSec = clamp((now - farm.lastHarvestAt)/1000, 0, maxAccrualSec);
+  const elapsedSec = clamp(curSinceHarvestSec - prevSinceHarvestSec, 0, FARM_MAX_OFFLINE_SEC);
+  if(elapsedSec > 0){
+    const bonusMult = 1 + farmRewardBonusPct()/100;
+    let gold=0, exp=0, gems=0;
+    farm.plots.forEach(p=>{
+      const def = p.kind==='crop' ? FARM_CROP_DEFS[p.typeKey] : FARM_TREE_DEFS[p.typeKey];
+      if(!def || def.kind!=='reward') return;
+      const enhanceMult = 1 + (p.enhanceLevel||0) * 0.05;
+      // exp 보상은 perSecondAmt가 절대치가 아니라 "현재 레벨 경험치 요구량 대비 초당 비율"이므로
+      // expNeeded(state.level)을 곱해 캐릭터 성장에 비례하는 실제 경험치량으로 환산한다.
+      const baseAmt = def.rewardType==='exp'
+        ? expNeeded(state.level) * def.perSecondAmt(p.rarityKey)
+        : def.perSecondAmt(p.rarityKey);
+      const amt = baseAmt * elapsedSec * bonusMult * enhanceMult;
+      if(def.rewardType==='gold') gold += amt;
+      else if(def.rewardType==='exp') exp += amt;
+      else if(def.rewardType==='gem') gems += amt;
+    });
+    farm.pendingGold += gold; farm.pendingExp += exp; farm.pendingGems += gems;
+  }
+  // [신규] 작물/나무별 주기적 특수 보상 드랍 판정 (일정 간격마다 낮은 확률로 젬스톤/보석/경험치버프/정령의 힘/신성한 장비 주문서 중 하나 드랍).
+  // 보상 적립 캡과는 별개로, 실제 경과 시간(now) 기준으로 판정하되 한 번의 tick에서 무한정 반복되지 않도록 안전장치(guard)를 둔다.
+  farm.plots.forEach(p=>{
+    if(typeof p.lastSpecialRollAt !== 'number') p.lastSpecialRollAt = p.plantedAt || now;
+    let guard = 0;
+    while(guard < 30){
+      const intervalMs = (FARM_SPECIAL_ROLL_MIN_SEC + Math.random()*(FARM_SPECIAL_ROLL_MAX_SEC-FARM_SPECIAL_ROLL_MIN_SEC)) * 1000;
+      if(now - p.lastSpecialRollAt < intervalMs) break;
+      p.lastSpecialRollAt += intervalMs;
+      guard++;
+      if(Math.random() < FARM_SPECIAL_DROP_CHANCE) grantFarmSpecialDrop(p);
+    }
+  });
+  farm.lastTickAt = now;
+}
+// 누적된 농장 보상(pendingGold/Exp/Gems)을 실제 state.gold/exp/gems로 지급하고 pending을 초기화한다.
+function harvestFarm(){
+  tickFarmProduction(); // 수거 직전 최신 생산량까지 반영
+  const farm = state.farm;
+  const gold = Math.floor(farm.pendingGold), exp = Math.floor(farm.pendingExp), gems = Math.floor(farm.pendingGems);
+  farm.lastHarvestAt = Date.now(); // [신규] 수거 시각 갱신 -> farmMaxAccrualSec 캡이 이 시점부터 다시 계산됨
+  if(gold<=0 && exp<=0 && gems<=0) return { gold:0, exp:0, gems:0, levelsGained:0 };
+  state.gold += gold; state.gems += gems;
+  // [수정] 농장 수확 경험치는 "경험치 3배" 버프 대상에서 제외 (스노우볼 루프 방지)
+  const levelsGained = exp>0 ? gainExp(exp, {skipExpBoost:true}) : 0;
+  farm.pendingGold -= gold; farm.pendingExp -= exp; farm.pendingGems -= gems;
+  return { gold, exp, gems, levelsGained };
+}
+// [신규] 작물/나무 특수 보상 드랍 판정 간격(초)과 확률.
+const FARM_SPECIAL_ROLL_MIN_SEC = 4*3600;
+const FARM_SPECIAL_ROLL_MAX_SEC = 8*3600;
+const FARM_SPECIAL_DROP_CHANCE = 0.15; // 간격 도달 시 15% 확률로 드랍
+const FARM_SPECIAL_DROP_TYPES = ['gemstone','gem','expBuff','spiritPower','divineScroll'];
+// 등급(rarityKey)이 높을수록, 농장 레벨이 높을수록 획득 개수가 소폭 늘어난다.
+function rollFarmSpecialDropCount(rarityKey, farmLevel){
+  const gradeIdx = Math.max(0, RARITY_ORDER.indexOf(rarityKey));
+  return 1 + Math.floor(gradeIdx/2) + Math.floor((farmLevel||1)/10);
+}
+// plot 하나에서 특수 보상 1회 지급 + 토스트 안내.
+function grantFarmSpecialDrop(plot){
+  const type = pick(FARM_SPECIAL_DROP_TYPES);
+  const count = rollFarmSpecialDropCount(plot.rarityKey, state.farm.level);
+  const def = plot.kind==='crop' ? FARM_CROP_DEFS[plot.typeKey] : FARM_TREE_DEFS[plot.typeKey];
+  const plotName = (def && def.name) ? def.name : (plot.kind==='crop' ? '작물' : '나무');
+  const rarityLabel = (RARITY_BY_KEY[plot.rarityKey]||{}).label || plot.rarityKey;
+  let msg = '';
+  if(type==='gemstone'){
+    state.gemstones = (state.gemstones||0) + count;
+    msg = `젬스톤 ${count}개`;
+  } else if(type==='gem'){
+    state.gems = (state.gems||0) + count;
+    msg = `보석 ${count}개`;
+  } else if(type==='expBuff'){
+    state.expBoostUntil = Math.max(Date.now(), state.expBoostUntil||0) + 3600*1000;
+    msg = `경험치 3배 버프 1시간`;
+  } else if(type==='spiritPower'){
+    state.expedition.essence.normal = (state.expedition.essence.normal||0) + count;
+    msg = `정령의 힘 ${count}개`;
+  } else if(type==='divineScroll'){
+    for(let i=0;i<count;i++) state.inventory.push(createDivineScroll());
+    msg = `신성한 장비 주문서 ${count}개`;
+  }
+  showToast(`[농장] ${rarityLabel} 등급 ${plotName}에서 특수 보상 획득! ${msg}`);
+}
+
+// 사육장 레벨에 따른 배치 가능 동물 수.
+function ranchCapacity(){ return 3 + (state.ranch.level||0); }
+// 사육장 레벨에 따른 생산 보너스%(레벨당 +5%).
+function ranchBonusPct(){ return (state.ranch.level||0) * 5; }
+// 사육장 강화에 필요한 벽돌량(레벨이 오를수록 증가, 무한 강화). 벽돌은 farm.materials.brick 공용 풀을 사용한다.
+function ranchUpgradeCost(level){ return 10 + (level||0)*8; }
+// 벽돌을 소모해 사육장 레벨업 (무한 강화). 성공 시 true 반환.
+function upgradeRanch(){
+  const ranch = state.ranch;
+  const cost = ranchUpgradeCost(ranch.level);
+  if((state.farm.materials.brick||0) < cost) return { ok:false, cost };
+  state.farm.materials.brick -= cost;
+  ranch.level += 1;
+  return { ok:true, cost };
+}
+// 던전에서 획득한 '동물 주문서'(인벤토리 아이템, kind:'animalScroll', rarityKey 보유) 사용 시 호출.
+// FARM_ANIMAL_KEYS 중 무작위 동물 종류를 뽑고, 주문서의 등급을 그대로 동물 등급으로 사용해 ranch.animals에 미배치 상태로 추가한다.
+function rollAnimalScroll(scrollRarityKey){
+  const animalKey = pick(FARM_ANIMAL_KEYS);
+  const animal = { id:uid(), kind:animalKey, rarityKey:scrollRarityKey||'common', placed:false, placedAt:0 };
+  state.ranch.animals.push(animal);
+  return animal;
+}
+// 보유 동물(id)을 사육장에 배치. ranchCapacity() 한도 내에서만 가능.
+function placeAnimal(animalId){
+  const ranch = state.ranch;
+  const animal = ranch.animals.find(a=>a.id===animalId);
+  if(!animal) return { ok:false, reason:'동물을 찾을 수 없음' };
+  if(animal.placed) return { ok:false, reason:'이미 배치됨' };
+  const placedCount = ranch.animals.filter(a=>a.placed).length;
+  if(placedCount >= ranchCapacity()) return { ok:false, reason:'사육장 정원 초과' };
+  animal.placed = true; animal.placedAt = Date.now();
+  return { ok:true };
+}
+// 배치된 동물을 사육장에서 내린다(보유는 유지, 재배치 가능).
+function removeAnimal(animalId){
+  const ranch = state.ranch;
+  const animal = ranch.animals.find(a=>a.id===animalId);
+  if(!animal) return false;
+  animal.placed = false;
+  return true;
+}
+// lastTickAt부터 현재까지 경과 시간만큼 배치된 동물들의 생산량을 pending*에 누적한다. (오프라인 캐치업 포함)
+function tickRanchProduction(){
+  const ranch = state.ranch;
+  const now = Date.now();
+  const elapsedSec = clamp((now - (ranch.lastTickAt||now))/1000, 0, FARM_MAX_OFFLINE_SEC);
+  if(elapsedSec <= 0){ ranch.lastTickAt = now; return; }
+  const bonusMult = 1 + ranchBonusPct()/100;
+  let gold=0, exp=0, gems=0;
+  ranch.animals.filter(a=>a.placed).forEach(a=>{
+    const def = FARM_ANIMAL_DEFS[a.kind];
+    if(!def) return;
+    // pig(exp)는 baseAmt가 절대치가 아니라 "현재 레벨 경험치 요구량 대비 초당 비율"이므로 expNeeded(state.level)을 곱해 환산한다.
+    const baseAmt = def.rewardType==='exp'
+      ? expNeeded(state.level) * def.baseAmt(a.rarityKey)
+      : def.baseAmt(a.rarityKey);
+    const amt = baseAmt * elapsedSec * bonusMult;
+    if(def.rewardType==='gold') gold += amt;
+    else if(def.rewardType==='exp') exp += amt;
+    else if(def.rewardType==='gem') gems += amt;
+  });
+  ranch.pendingGold += gold; ranch.pendingExp += exp; ranch.pendingGems += gems;
+  ranch.lastTickAt = now;
+}
+// 누적된 사육장 보상을 실제 state.gold/exp/gems로 지급하고 pending을 초기화한다.
+function harvestRanch(){
+  tickRanchProduction();
+  const ranch = state.ranch;
+  const gold = Math.floor(ranch.pendingGold), exp = Math.floor(ranch.pendingExp), gems = Math.floor(ranch.pendingGems);
+  if(gold<=0 && exp<=0 && gems<=0) return { gold:0, exp:0, gems:0, levelsGained:0 };
+  state.gold += gold; state.gems += gems;
+  const levelsGained = exp>0 ? gainExp(exp, {skipExpBoost:true}) : 0;
+  ranch.pendingGold -= gold; ranch.pendingExp -= exp; ranch.pendingGems -= gems;
+  return { gold, exp, gems, levelsGained };
+}
+// 던전 드롭용 동물 주문서 인벤토리 아이템 생성 (다른 scroll류와 동일한 { id, kind, rarityKey, name } 형태).
+function generateAnimalScroll(rarityKey){
+  const rarity = RARITY_BY_KEY[rarityKey] || RARITY_BY_KEY.common;
+  return { id:uid(), kind:'animalScroll', rarityKey:rarity.key, name:'동물 주문서' };
+}
+// 인벤토리에서 동물 주문서(kind:'animalScroll') 사용: rollAnimalScroll로 사육장에 미배치 동물을 추가하고, 사용한 주문서는 인벤토리에서 제거한다.
+function useAnimalScroll(itemId){
+  const idx = state.inventory.findIndex(i=>i.id===itemId && i.kind==='animalScroll');
+  if(idx===-1) return;
+  const scroll = state.inventory[idx];
+  state.inventory.splice(idx,1);
+  const animal = rollAnimalScroll(scroll.rarityKey);
+  const rarity = RARITY_BY_KEY[animal.rarityKey]||RARITIES[0];
+  const kindName = (FARM_ANIMAL_DEFS[animal.kind]||{}).name||animal.kind;
+  showToast(`동물 주문서 사용! ${rarity.label} 등급 ${kindName}을(를) 획득했습니다. 사육장 탭에서 배치해보세요.`);
+  renderAll();
+}
+
+// [신규] 농장 특수 보상으로만 획득 가능한 인벤토리 아이템(kind:'divineScroll'). 사용 시 착용 중인 장비 중 부여효과가 있는
+// 장비 1개를 무작위로 골라 모든 부여옵션(affixes/additionalOptions) 수치를 20~40% 증폭시키는 100% 확정 성공 주문서.
+function createDivineScroll(){
+  return { id:uid(), kind:'divineScroll', rarityKey:'legendary', name:'신성한 장비 주문서' };
+}
+// 인벤토리에서 신성한 장비 주문서(kind:'divineScroll') 사용: 착용 중인 장비 중 affixes 또는 additionalOptions가 있는
+// 장비를 무작위로 1개 골라 각 옵션 수치를 20~40% 증폭시킨다. 100% 확정 성공(실패 없음).
+function useDivineScroll(itemId){
+  const idx = state.inventory.findIndex(i=>i.id===itemId && i.kind==='divineScroll');
+  if(idx===-1) return;
+  const candidates = Object.entries(state.equipment).filter(([slotKey, it])=> it && (((it.affixes||[]).length) || ((it.additionalOptions||[]).length)));
+  if(!candidates.length){ showToast('부여 효과가 있는 장착 중인 장비가 없습니다.', true); return; }
+  const [slotKey, item] = pick(candidates);
+  const amplify = (line)=>{
+    if(!line || typeof line.value !== 'number') return;
+    const mult = 1 + (0.2 + Math.random()*0.2); // 20~40% 증폭
+    line.value = Math.round(line.value * mult * 100) / 100;
+  };
+  (item.affixes||[]).forEach(amplify);
+  (item.additionalOptions||[]).forEach(amplify);
+  state.inventory.splice(idx,1);
+  showToast(`신성한 장비 주문서 사용! [${escapeHtml(item.name)}]의 모든 부여옵션 수치가 대폭 상승했습니다.`);
+  renderAll();
+}
 
 function rollRarity(bias=0, weaponMode=false){
   // 무기는 다른 부위보다 고등급(희귀+) 드롭률을 추가로 낮춘다. 전체적으로도 등급이 높을수록 확률을 더 크게 깎는다.
@@ -3051,6 +3609,73 @@ function generateArmor(type, bias=0, reqLevel=1, forcedRarityKey=null){
     additionalOptions: generateAdditionalOptions(rarity.key, false),
     scrollCount:0, socketedRune:null, socketedEffectStone:null
   };
+}
+// ---- 레이드 뱃지 / 월드보스 칭호: 레이드/월드보스 보상으로 낮은 확률로 드롭되는 전용 장비.
+// 다른 장비와 동일하게 부여효과(affixes)와 에디셔널 옵션(additionalOptions)이 붙지만,
+// 세트 효과(setKey)는 굴리지 않고 등급별 확률 테이블을 별도로 갖는다(호출부에서 stage/tier로 등급을 결정해 전달).
+function generateRaidBadge(forcedRarityKey, reqLevel=1){
+  const rarity = forcedRarityKey ? RARITY_BY_KEY[forcedRarityKey] : RARITY_BY_KEY.rare;
+  const pool = SLOTS.find(s=>s.itemType==='badge').pool;
+  const numStats = rarity.key === 'legendary' || rarity.key === 'mythic' ? 3 : rarity.key === 'epic' ? 2 : 1;
+  const stats = {};
+  for(let i=0;i<numStats;i++){
+    const st = pick(pool);
+    stats[st] = (stats[st]||0) + Math.round(randInt(1,3) * RARITY_MULT[rarity.key] * (1 + Math.max(0,reqLevel-1)*0.07));
+  }
+  const name = baseNameFor(ARMOR_NAMES, 'badge', rarity.key);
+  return {
+    id:uid(), type:'badge', rarityKey:rarity.key, name, stats, enhanceLevel:0, setKey:null,
+    reqLevel, affixes: generateAffixLines(rarity.key, RARITY_MULT[rarity.key]),
+    additionalOptions: generateAdditionalOptions(rarity.key, false),
+    scrollCount:0, socketedRune:null, socketedEffectStone:null
+  };
+}
+function generateWorldBossTitle(forcedRarityKey, reqLevel=1){
+  const rarity = forcedRarityKey ? RARITY_BY_KEY[forcedRarityKey] : RARITY_BY_KEY.rare;
+  const pool = SLOTS.find(s=>s.itemType==='title').pool;
+  const numStats = rarity.key === 'legendary' || rarity.key === 'mythic' ? 3 : rarity.key === 'epic' ? 2 : 1;
+  const stats = {};
+  for(let i=0;i<numStats;i++){
+    const st = pick(pool);
+    stats[st] = (stats[st]||0) + Math.round(randInt(1,3) * RARITY_MULT[rarity.key] * (1 + Math.max(0,reqLevel-1)*0.07));
+  }
+  const name = baseNameFor(ARMOR_NAMES, 'title', rarity.key);
+  return {
+    id:uid(), type:'title', rarityKey:rarity.key, name, stats, enhanceLevel:0, setKey:null,
+    reqLevel, affixes: generateAffixLines(rarity.key, RARITY_MULT[rarity.key]),
+    additionalOptions: generateAdditionalOptions(rarity.key, false),
+    scrollCount:0, socketedRune:null, socketedEffectStone:null
+  };
+}
+// 레이드 단계(stage 1~5)가 높을수록 더 좋은 등급의 뱃지가 나오도록 단계별 등급 확률 테이블을 정의한다.
+const RAID_BADGE_RARITY_TABLE = {
+  1: { rare:55, epic:35, legendary:9,  mythic:1 },
+  2: { rare:35, epic:45, legendary:17, mythic:3 },
+  3: { rare:15, epic:45, legendary:32, mythic:8 },
+  4: { rare:5,  epic:30, legendary:45, mythic:20 },
+  5: { rare:0,  epic:15, legendary:45, mythic:40 }
+};
+function rollRaidBadgeRarity(stage){
+  const table = RAID_BADGE_RARITY_TABLE[stage] || RAID_BADGE_RARITY_TABLE[1];
+  const entries = Object.entries(table).filter(([,w])=>w>0);
+  const total = entries.reduce((a,[,w])=>a+w,0);
+  let roll = Math.random()*total;
+  for(const [key,w] of entries){ if(roll<w) return key; roll -= w; }
+  return entries[0][0];
+}
+// 월드보스 누적 처치 횟수가 많을수록 더 좋은 등급의 칭호가 나오도록 등급 확률 테이블을 정의한다.
+function rollWorldBossTitleRarity(totalDefeats){
+  const d = totalDefeats||0;
+  const table = d>=100 ? { rare:0,  epic:15, legendary:45, mythic:40 }
+              : d>=50  ? { rare:5,  epic:30, legendary:45, mythic:20 }
+              : d>=20  ? { rare:15, epic:45, legendary:32, mythic:8 }
+              : d>=5   ? { rare:35, epic:45, legendary:17, mythic:3 }
+              :          { rare:55, epic:35, legendary:9,  mythic:1 };
+  const entries = Object.entries(table).filter(([,w])=>w>0);
+  const total = entries.reduce((a,[,w])=>a+w,0);
+  let roll = Math.random()*total;
+  for(const [key,w] of entries){ if(roll<w) return key; roll -= w; }
+  return entries[0][0];
 }
 function generateItem(type, bias=0, job=null, reqLevel=1, forcedRarityKey=null){
   const t = type || pick(ALL_ITEM_TYPES);
@@ -3198,6 +3823,11 @@ function computeTotalsFor(s){
       else effectProcs.push({ type: line.type, chance: line.value });
     });
   });
+
+  // 농장의 전투형 작물/나무가 주는 기본 스탯(str/vit/agi/int/luk)을 장비와 동일한 방식으로 최종 스탯에 합산한다.
+  // (직접 atk를 부여하는 타입(예: 철목나무)은 여기서 처리하지 않고, 아래 flat atk 가산부에서 별도 처리한다)
+  const farmBonus = farmCombatStatBonuses();
+  PRIMARY_STATS.forEach(k=>{ if(farmBonus[k]) totals[k] += farmBonus[k]; });
 
   PRIMARY_STATS.forEach(k=>{
     const pct = affixAcc.allStatPct + affixAcc.statPct[k];
@@ -3355,6 +3985,9 @@ function computeTotalsFor(s){
   critDmgMult += fishingBonus.luk*0.002*lukRoleMult;
   maxMana += fishingBonus.int*4;
   skillMult += fishingBonus.int*0.01*intRoleMult;
+
+  // 농장의 전투형 작물/나무 중 공격력을 직접 부여하는 타입(예: 철목나무)은 펫/정령/낚시와 동일하게 최종 공격력에 flat 가산한다.
+  if(farmBonus.atk) atk += farmBonus.atk;
 
   // 펫/정령/낚시/광산 보석에서 소폭씩 오르는 "버프 지속시간 %" 스탯을 모두 합산한다.
   // (전투 시뮬레이션에서 버프 스킬의 지속시간을 늘리는 데 사용됨)
@@ -3614,6 +4247,9 @@ async function loadSlot(slotId){
 async function saveSlot(slotId, data){
   if(!hasStorage || !slotId) return false;
   try{
+    // 저장 직전 농장/사육장 lastTickAt을 최신 상태로 맞춰, 저장된 시점까지의 생산량이 정확히 pending에 반영되게 한다.
+    if(data && data.farm) tickFarmProduction();
+    if(data && data.ranch) tickRanchProduction();
     await storageSet('slot:'+slotId, JSON.stringify(data));
     return true;
   }catch(e){ return false; }
@@ -3635,6 +4271,10 @@ function loadStateInto(data){
   const merged = normalizeState(data);
   Object.keys(state).forEach(k => delete state[k]);
   Object.assign(state, merged);
+  // 슬롯 로드 직후, 오프라인 동안 쌓인 농장/사육장 생산량을 즉시 반영한다.
+  // 구버전 세이브(normalizeState가 farm/ranch를 채워주지 못한 경우 등)를 대비해 존재 여부를 먼저 확인한다.
+  if(state.farm) tickFarmProduction();
+  if(state.ranch) tickRanchProduction();
 }
 function resetStateFresh(){
   Object.keys(state).forEach(k => delete state[k]);
@@ -3716,6 +4356,225 @@ function petCardHtml(pet){
     <button class="pet-card-quick-btn${equipped?' on':''}" data-pet-quick-toggle="${pet.id}">${equipped?'해제':'착용'}</button>
     ${equipped ? '<div class="pet-card-badge">착용중</div>' : ''}
   </div>`;
+}
+/* =============================================================
+   FARM TAB — UI (농장/사육장 서브탭 뼈대 + 농장 화면 렌더링)
+   담당: 농장(작물/나무) 탭 UI. 사육장 서브탭(renderRanchSub)의 실제 내용물은
+   다른 에이전트가 채울 예정이므로 여기서는 임시 플레이스홀더만 둔다.
+   ============================================================= */
+let farmSubTab = 'farm';
+let farmPlantPickerMode = null; // null | 'crop' | 'tree' — 씨앗/나무 선택 피커 표시 여부
+function renderFarmTab(){
+  tickFarmProduction(); // 화면 진입 시 최신 누적 보상을 먼저 계산한다
+  document.querySelectorAll('#farmSubTabs button').forEach(b=> b.classList.toggle('active', b.dataset.farmsub===farmSubTab));
+  document.getElementById('farmSubFarm').classList.toggle('hidden', farmSubTab!=='farm');
+  document.getElementById('farmSubRanch').classList.toggle('hidden', farmSubTab!=='ranch');
+  if(farmSubTab==='farm') renderFarmSub();
+  if(farmSubTab==='ranch') renderRanchSub();
+}
+// 사육장 서브탭: 레벨/강화, 배치 동물 목록, 미배치 동물 목록, 보너스%, 미수거 보상 표시.
+function renderRanchSub(){
+  tickRanchProduction(); // 화면 진입 시 최신 누적 보상을 먼저 계산한다
+  const box = document.getElementById('farmSubRanch');
+  if(!box) return;
+  const ranch = state.ranch;
+  const cap = ranchCapacity();
+  const cost = ranchUpgradeCost(ranch.level);
+  const haveBrick = state.farm.materials.brick||0;
+  const canUpgrade = haveBrick >= cost;
+  const bonusPct = ranchBonusPct();
+  const placed = ranch.animals.filter(a=>a.placed);
+  const unplaced = ranch.animals.filter(a=>!a.placed);
+  const pendingGold = Math.floor(ranch.pendingGold), pendingExp = Math.floor(ranch.pendingExp), pendingGems = Math.floor(ranch.pendingGems);
+  const canHarvest = pendingGold>0 || pendingExp>0 || pendingGems>0;
+  const animalCardHtml = (a, placedCard)=>{
+    const rarity = RARITY_BY_KEY[a.rarityKey] || RARITIES[0];
+    const def = FARM_ANIMAL_DEFS[a.kind] || {};
+    // pig(exp)는 baseAmt가 "현재 레벨 경험치 요구량 대비 초당 비율"이므로 expNeeded(state.level)을 곱해 미리보기 표시.
+    const baseAmtVal = def.baseAmt ? (def.rewardType==='exp' ? expNeeded(state.level) * def.baseAmt(a.rarityKey) : def.baseAmt(a.rarityKey)) : 0;
+    const perSec = baseAmtVal * (1+bonusPct/100);
+    const rewardLabel = FARM_REWARD_LABEL[def.rewardType] || '';
+    return `<div class="stat-box" style="margin-bottom:8px;">
+      <div style="display:flex;align-items:center;gap:6px;">
+        <span class="rarity-tag ${rarity.cls}">${rarity.label}</span>
+        <span style="font-weight:700;font-size:12.5px;">${escapeHtml(def.name||a.kind)}</span>
+      </div>
+      <div style="font-size:10.5px;color:var(--text-dim);margin-top:4px;">초당 ${rewardLabel} +${perSec.toLocaleString(undefined,{maximumFractionDigits:2})}</div>
+      <button class="btn ${placedCard?'btn-secondary':'btn-primary'}" style="margin-top:6px;font-size:10.5px;padding:4px 8px;" data-ranch-${placedCard?'remove':'place'}="${a.id}">${placedCard?'배치 해제':'배치'}</button>
+    </div>`;
+  };
+  const placedHtml = placed.length
+    ? `<div class="farm-plot-grid">${placed.map(a=>animalCardHtml(a,true)).join('')}</div>`
+    : `<div style="font-size:11px;color:var(--text-dim);padding:8px 0;">배치된 동물이 없습니다.</div>`;
+  const unplacedHtml = unplaced.length
+    ? `<div class="farm-plot-grid">${unplaced.map(a=>animalCardHtml(a,false)).join('')}</div>`
+    : `<div style="font-size:11px;color:var(--text-dim);padding:8px 0;">보유한 미배치 동물이 없습니다. 던전에서 동물 주문서를 얻어 가방에서 사용해보세요.</div>`;
+  const html = `
+    <div class="stat-box" style="margin-bottom:10px;">
+      <div class="stat-label">사육장 레벨</div>
+      <div class="stat-val" style="font-size:15px;">Lv.${ranch.level} <span style="font-size:10.5px;color:var(--text-dim);font-weight:400;">(정원 ${placed.length}/${cap} · 보너스 +${bonusPct}%)</span></div>
+      <div style="font-size:10.5px;color:var(--text-dim);margin-top:4px;">강화 필요 재료: 벽돌 ${haveBrick}/${cost}</div>
+      <button class="btn btn-primary" id="ranchUpgradeBtn" style="margin-top:7px;font-size:10.5px;padding:5px 10px;" ${canUpgrade?'':'disabled'}>사육장 강화</button>
+    </div>
+    <div class="section-label" style="margin-top:12px;justify-content:space-between;">
+      <span>미수거 보상</span>
+    </div>
+    <div style="font-size:11px;color:var(--text-dim);">
+      골드 +${pendingGold.toLocaleString()} · 경험치 +${pendingExp.toLocaleString()} · 보석 +${pendingGems.toLocaleString()}
+    </div>
+    <button class="btn btn-primary btn-block" id="ranchHarvestBtn" style="margin-top:6px;" ${canHarvest?'':'disabled'}>수거하기</button>
+    <div class="section-label" style="margin-top:12px;">
+      <span>배치된 동물 (${placed.length}/${cap})</span>
+    </div>
+    ${placedHtml}
+    <div class="section-label" style="margin-top:12px;">
+      <span>보유 중인 미배치 동물 (${unplaced.length})</span>
+    </div>
+    ${unplacedHtml}
+  `;
+  box.innerHTML = html;
+  const upgradeBtn = document.getElementById('ranchUpgradeBtn');
+  if(upgradeBtn) upgradeBtn.addEventListener('click', ()=>{
+    const res = upgradeRanch();
+    if(res.ok) showToast(`사육장을 Lv.${state.ranch.level}(으)로 강화했습니다!`);
+    else showToast(`벽돌이 부족합니다 (필요 ${res.cost})`, true);
+    renderFarmTab();
+  });
+  const harvestBtn = document.getElementById('ranchHarvestBtn');
+  if(harvestBtn) harvestBtn.addEventListener('click', ()=>{
+    const res = harvestRanch();
+    if(res.gold<=0 && res.exp<=0 && res.gems<=0){ showToast('수거할 보상이 없습니다', true); return; }
+    let msg = `사육장 보상 수거! 골드 +${res.gold.toLocaleString()} · 경험치 +${res.exp.toLocaleString()} · 보석 +${res.gems.toLocaleString()}`;
+    if(res.levelsGained>0) msg += ` · 레벨업 +${res.levelsGained}`;
+    showToast(msg);
+    renderAll();
+  });
+  box.querySelectorAll('[data-ranch-place]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const res = placeAnimal(btn.dataset.ranchPlace);
+      if(!res.ok) showToast(res.reason||'배치할 수 없습니다', true);
+      renderFarmTab();
+    });
+  });
+  box.querySelectorAll('[data-ranch-remove]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      removeAnimal(btn.dataset.ranchRemove);
+      renderFarmTab();
+    });
+  });
+}
+
+function farmDefOf(plot){ return plot.kind==='crop' ? FARM_CROP_DEFS[plot.typeKey] : FARM_TREE_DEFS[plot.typeKey]; }
+const FARM_REWARD_LABEL = { gold:'골드', exp:'경험치', gem:'보석' };
+
+function farmPlotCardHtml(plot){
+  const def = farmDefOf(plot);
+  if(!def) return '';
+  const rarity = RARITY_BY_KEY[plot.rarityKey] || RARITIES[0];
+  const kindLabel = plot.kind==='crop' ? '작물' : '나무';
+  const enhanceLevel = plot.enhanceLevel||0;
+  const enhanceMult = 1 + enhanceLevel * 0.05;
+  let effectHtml = '';
+  if(def.kind==='reward'){
+    // exp 보상은 perSecondAmt가 "현재 레벨 경험치 요구량 대비 초당 비율"이므로 expNeeded(state.level)을 곱해 미리보기 표시.
+    const perSec = (def.rewardType==='exp' ? expNeeded(state.level) * def.perSecondAmt(plot.rarityKey) : def.perSecondAmt(plot.rarityKey)) * enhanceMult;
+    const bonus = def.bonusPct(plot.rarityKey);
+    effectHtml = `<div style="font-size:10.5px;color:var(--text-dim);">${FARM_REWARD_LABEL[def.rewardType]||def.rewardType} 초당 +${perSec.toLocaleString(undefined,{maximumFractionDigits:2})}<br>농장 보너스 +${bonus.toFixed(1)}%</div>`;
+  } else {
+    const amt = def.statAmt(plot.rarityKey) * enhanceMult;
+    effectHtml = `<div style="font-size:10.5px;color:var(--text-dim);">${STAT_LABEL[def.statKey]||def.statKey} +${amt.toLocaleString(undefined,{maximumFractionDigits:2})}</div>`;
+  }
+  const enhanceCost = plotEnhanceCost(plot);
+  return `<div class="farm-plot-card" style="border-color:${rarity.color};">
+    <div><span class="rarity-tag ${rarity.cls}" style="font-size:8px;">${rarity.label}</span> <span style="font-size:9.5px;color:var(--text-dim);">${kindLabel} · ${def.kind==='reward'?'보상형':'전투형'}</span></div>
+    <div style="font-weight:700;font-size:12.5px;margin:2px 0;">${escapeHtml(def.name)} <span style="font-size:9.5px;color:var(--text-dim);font-weight:400;">강화 +${enhanceLevel}</span></div>
+    ${effectHtml}
+    <div style="display:flex;gap:5px;margin-top:5px;">
+      <button class="btn btn-primary" data-farm-enhance="${plot.id}" style="font-size:9px;padding:3px 7px;">물로 강화 (물 ${enhanceCost})</button>
+      <button class="btn btn-danger" data-farm-remove="${plot.id}" style="font-size:9px;padding:3px 7px;">제거</button>
+    </div>
+  </div>`;
+}
+
+function farmMaterialSummaryHtml(){
+  const mat = state.farm.materials;
+  const woodParts = FARM_WOOD_TYPES.map(k=> `${FARM_WOOD_LABEL[k]} ${(mat.wood[k]||0).toLocaleString()}`).join(' · ');
+  const seedParts = FARM_SEED_TYPES.map(k=> `${FARM_SEED_LABEL[k]} ${(mat.seed[k]||0).toLocaleString()}`).join(' · ');
+  return `<div class="section-label"><span>보유 재료</span></div>
+    <div style="font-size:10.5px;color:var(--text-dim);line-height:1.7;">
+      나무: ${woodParts}<br>
+      씨앗: ${seedParts}<br>
+      벽돌: ${(mat.brick||0).toLocaleString()} · 물: ${(mat.water||0).toLocaleString()}
+    </div>`;
+}
+
+function farmPlantPickerHtml(){
+  if(!farmPlantPickerMode) return '';
+  const mat = state.farm.materials;
+  if(farmPlantPickerMode==='crop'){
+    const chips = FARM_SEED_TYPES.map(k=>{
+      const cnt = mat.seed[k]||0;
+      const def = Object.values(FARM_CROP_DEFS).find(d=>d.seedType===k);
+      return `<button class="btn btn-secondary" data-farm-plant-seed="${k}" style="font-size:9.5px;padding:5px 8px;" ${cnt<1?'disabled':''}>${FARM_SEED_LABEL[k]}(${cnt}) → ${def?escapeHtml(def.name):''}</button>`;
+    }).join('');
+    return `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;">${chips}</div>`;
+  }
+  const chips = FARM_WOOD_TYPES.map(k=>{
+    const cnt = mat.wood[k]||0;
+    const def = Object.values(FARM_TREE_DEFS).find(d=>d.woodType===k);
+    return `<button class="btn btn-secondary" data-farm-plant-wood="${k}" style="font-size:9.5px;padding:5px 8px;" ${cnt<1?'disabled':''}>${FARM_WOOD_LABEL[k]}(${cnt}) → ${def?escapeHtml(def.name):''}</button>`;
+  }).join('');
+  return `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;">${chips}</div>`;
+}
+
+function renderFarmSub(){
+  const farm = state.farm;
+  const cap = farmPlotCapacity();
+  const cost = farmUpgradeCost(farm.level);
+  const mat = farm.materials;
+  const haveWood = sumFarmMaterialPool(mat.wood), haveSeed = sumFarmMaterialPool(mat.seed);
+  const canUpgrade = haveWood>=cost.wood && (mat.brick||0)>=cost.brick && haveSeed>=cost.seed && (mat.water||0)>=cost.water;
+  const pendingGold = Math.floor(farm.pendingGold), pendingExp = Math.floor(farm.pendingExp), pendingGems = Math.floor(farm.pendingGems);
+  const canHarvest = pendingGold>0 || pendingExp>0 || pendingGems>0;
+  // [신규] 레벨별 최대 적립 가능 시간 진행 표시: 마지막 수거 이후 경과 시간 / 최대 적립 가능 시간.
+  const maxAccrualSec = farmMaxAccrualSec(farm.level);
+  const sinceHarvestSec = Math.max(0, (Date.now() - (farm.lastHarvestAt||Date.now()))/1000);
+  const accrualCapped = sinceHarvestSec >= maxAccrualSec;
+  const accrualHtml = `<div style="font-size:10px;color:${accrualCapped?'var(--danger,#e05a5a)':'var(--text-dim)'};margin-top:4px;">
+      최대 적립 가능 시간: ${(maxAccrualSec/3600).toFixed(1)}시간 · 현재 ${(sinceHarvestSec/3600).toFixed(1)}시간째 적립 중${accrualCapped?' (한도 도달, 더 이상 쌓이지 않음 - 수거해주세요)':''}
+    </div>`;
+  const plotsHtml = farm.plots.length
+    ? `<div class="farm-plot-grid">${farm.plots.map(farmPlotCardHtml).join('')}</div>`
+    : `<div style="font-size:11px;color:var(--text-dim);padding:8px 0;">심어진 작물/나무가 없습니다.</div>`;
+  const html = `
+    <div class="stat-box" style="margin-bottom:10px;">
+      <div class="stat-label">농장 레벨</div>
+      <div class="stat-val" style="font-size:15px;">Lv.${farm.level} <span style="font-size:10.5px;color:var(--text-dim);font-weight:400;">(슬롯 ${farm.plots.length}/${cap})</span></div>
+      <div style="font-size:10.5px;color:var(--text-dim);margin-top:4px;">
+        강화 필요 재료: 나무 ${haveWood}/${cost.wood} · 벽돌 ${(mat.brick||0)}/${cost.brick} · 씨앗 ${haveSeed}/${cost.seed} · 물 ${(mat.water||0)}/${cost.water}
+      </div>
+      <button class="btn btn-primary" id="farmUpgradeBtn" style="margin-top:7px;font-size:10.5px;padding:5px 10px;" ${canUpgrade?'':'disabled'}>농장 강화</button>
+    </div>
+    ${farmMaterialSummaryHtml()}
+    <div class="section-label" style="margin-top:12px;justify-content:space-between;">
+      <span>미수거 보상</span>
+    </div>
+    <div style="font-size:11px;color:var(--text-dim);">
+      골드 +${pendingGold.toLocaleString()} · 경험치 +${pendingExp.toLocaleString()} · 보석 +${pendingGems.toLocaleString()}
+    </div>
+    ${accrualHtml}
+    <button class="btn btn-primary btn-block" id="farmHarvestBtn" style="margin-top:6px;" ${canHarvest?'':'disabled'}>수거하기</button>
+    <div class="section-label" style="margin-top:12px;justify-content:space-between;">
+      <span>심어진 작물/나무 (${farm.plots.length}/${cap})</span>
+      <div style="display:flex;gap:6px;">
+        <button class="btn btn-secondary" id="farmOpenPlantCropBtn" style="font-size:9.5px;padding:4px 8px;" ${farm.plots.length>=cap?'disabled':''}>씨앗 심기</button>
+        <button class="btn btn-secondary" id="farmOpenPlantTreeBtn" style="font-size:9.5px;padding:4px 8px;" ${farm.plots.length>=cap?'disabled':''}>나무 심기</button>
+      </div>
+    </div>
+    ${farmPlantPickerHtml()}
+    ${plotsHtml}
+  `;
+  document.getElementById('farmSubFarm').innerHTML = html;
 }
 let petSubTab = 'equipped';
 function renderPetTab(){
@@ -4046,11 +4905,19 @@ function renderFishGearSub(){
   box.querySelectorAll('[data-fish-gear-levelup]').forEach(btn=> btn.addEventListener('click', ()=> levelUpFishGear(btn.dataset.fishGearLevelup)));
 }
 // "펫장비" 탭: 보유한 모든 펫 장비를 등급순으로 모아서 보여준다
+// [신규] 등급별 필터: 정령 장비 탭(spiritGearFilter, renderSpiritGearSub)과 동일한 inv-filter 패턴을 재사용한다.
+let petGearFilter = 'all'; // 펫 장비 탭 등급 필터: all/common/rare/epic/legendary/mythic
 function renderPetGearListSub(){
   const box = document.getElementById('petGearListBox');
   if(!box) return;
-  const gear = [...state.inventory.filter(i=>i.kind==='petgear')].sort((a,b)=> RARITY_MULT[b.rarityKey]-RARITY_MULT[a.rarityKey]);
-  box.innerHTML = gear.length ? gear.map(renderPetGearCard).join('') : '<div class="inv-empty">보유한 펫 장비가 없습니다.<br>상점에서 장비 상자를 구매해보세요.</div>';
+  const fullGear = [...state.inventory.filter(i=>i.kind==='petgear')].sort((a,b)=> RARITY_MULT[b.rarityKey]-RARITY_MULT[a.rarityKey]);
+  const gear = fullGear.filter(g=> petGearFilter==='all' || g.rarityKey===petGearFilter);
+  const petFilterTabs = [['all','전체'],['common','일반'],['rare','희귀'],['epic','영웅'],['legendary','전설'],['mythic','신화']]
+    .map(([k,label])=> `<button class="${petGearFilter===k?'active':''}" data-pet-gear-filter="${k}">${label}</button>`).join('');
+  const filterBar = fullGear.length ? `<div class="inv-filter" style="margin-bottom:6px;">${petFilterTabs}</div>` : '';
+  const cards = gear.length ? gear.map(renderPetGearCard).join('') : (fullGear.length ? '<div class="inv-empty">선택한 등급의 펫 장비가 없습니다.</div>' : '<div class="inv-empty">보유한 펫 장비가 없습니다.<br>상점에서 장비 상자를 구매해보세요.</div>');
+  box.innerHTML = filterBar + cards;
+  box.querySelectorAll('[data-pet-gear-filter]').forEach(btn=> btn.addEventListener('click', ()=>{ petGearFilter = btn.dataset.petGearFilter; renderPetGearListSub(); }));
 }
 // 펫장비 일괄판매: 보유(미착용) 펫장비 중 일반/희귀 등급(저등급)만 한번에 판매한다. (착용 중인 펫장비는 인벤토리에 없으므로 대상에서 자동 제외됨)
 const PET_GEAR_BULK_SELL_MAX_RARITY = 'rare'; // 이 등급 이하만 일괄판매 대상
@@ -4623,15 +5490,23 @@ function renderDetailPanel(){
         return `<div class="set-line ${active?'active':''}">${active?'✓':'○'} ${b.count}세트: ${b.text}</div>`;
       }).join('')}</div>`;
   }
+  const runeEffectsHtml = item.socketedRune
+    ? `<div class="affix-box" style="grid-column:1/-1;margin-top:4px;">${(item.socketedRune.lines||[]).map(l=>`<div class="affix-line">${affixLineHtml(l)}</div>`).join('')}</div>`
+    : '';
   const runeHtml = `<div class="socket-row">
       <div class="socket-icon rune${item.socketedRune?' filled':''}" title="${item.socketedRune ? '룬석: '+item.socketedRune.name+' — '+(item.socketedRune.lines||[]).map(affixLineText).join(', ') : '장착된 룬석 없음'}">${RUNE_ICON_SVG}</div>
       <div class="socket-row-label" style="color:${item.socketedRune?'var(--mana)':'var(--text-dim)'};">${item.socketedRune ? item.socketedRune.name : '장착된 룬석 없음'}</div>
       <div class="socket-row-action">${item.socketedRune ? '<button class="btn-icon" id="swapRuneBtn">교체</button><button class="btn-icon" id="unsocketRuneBtn">해제</button>' : '<button class="btn-icon" id="pickRuneBtn">룬 적용</button>'}</div>
+      ${runeEffectsHtml}
     </div>`;
+  const stoneEffectsHtml = item.socketedEffectStone
+    ? `<div class="affix-box" style="grid-column:1/-1;margin-top:4px;">${(item.socketedEffectStone.lines||[]).map(l=>`<div class="affix-line" style="color:${EFFECT_STONE_TYPES[l.type].isStat?'var(--hp)':'var(--c-epic)'};">${escapeHtml(EFFECT_STONE_TYPES[l.type].text(l.value))}</div>`).join('')}</div>`
+    : '';
   const stoneHtml = `<div class="socket-row">
       <div class="socket-icon stone${item.socketedEffectStone?' filled':''}" title="${item.socketedEffectStone ? '효과석: '+item.socketedEffectStone.name+' — '+(item.socketedEffectStone.lines||[]).map(l=>EFFECT_STONE_TYPES[l.type].text(l.value)).join(', ') : '장착된 효과석 없음'}">${STONE_ICON_SVG}</div>
       <div class="socket-row-label" style="color:${item.socketedEffectStone?'var(--hp)':'var(--text-dim)'};">${item.socketedEffectStone ? item.socketedEffectStone.name : '장착된 효과석 없음'}</div>
       <div class="socket-row-action">${item.socketedEffectStone ? '<button class="btn-icon" id="swapStoneBtn">교체</button><button class="btn-icon" id="unsocketStoneBtn">해제</button>' : (EFFECT_STONE_ALLOWED_SLOTS.includes(openDetailType) ? '<button class="btn-icon" id="pickStoneBtn">효과석 적용</button>' : '')}</div>
+      ${stoneEffectsHtml}
     </div>`;
   const scrollRestoreCost = scrollRestoreCostFor(item);
   const scrollRestorable = (item.scrollCount||0) - (item.scrollSuccessCount||0) > 0;
@@ -4857,6 +5732,16 @@ function renderSkills(){
           <button class="btn-icon" data-skill-enhance="${key}">강화 (골드 ${enhanceCost.gold.toLocaleString()}·보석 ${enhanceCost.gems.toLocaleString()})</button>
           <button class="btn-icon" data-skill-enhance-bulk="${key}" title="재화가 소진될 때까지 자동으로 반복 강화합니다">최대치까지 일괄 강화</button>
         </div>` : '';
+    // [신규] 5차 스킬 전용 젬스톤 강화 UI: SP 레벨과 무관하게(스킬을 배우기만 했다면) 젬스톤을 소모해 추가로 강화할 수 있다.
+    const canGemEnhance = isTier5SkillKey(key) && !locked;
+    const gemLv = canGemEnhance ? gemEnhanceLevel(key) : 0;
+    const gemIsMax = gemLv >= GEM_ENHANCE_MAX_LEVEL;
+    const gemCost = canGemEnhance ? gemEnhanceCost(key) : null;
+    const gemEnhanceRow = canGemEnhance ? `
+        <div class="skill-bottom-row" style="margin-top:6px;border-top:1px dashed var(--border-soft);padding-top:6px;">
+          <div class="skill-effect" style="color:var(--c-epic, #b17dff);">젬스톤 강화 Lv.${gemLv}/${GEM_ENHANCE_MAX_LEVEL} · 효과 +${Math.round((gemEnhanceBonusMult(key)-1)*100)}%</div>
+          <button class="btn-icon" data-skill-gem-enhance="${key}" ${gemIsMax?'disabled':''}>${gemIsMax?'MAX':`젬스톤 강화 (젬스톤 ${gemCost})`}</button>
+        </div>` : '';
     return `
       <div class="skill-card">
         <div class="skill-head">
@@ -4870,17 +5755,25 @@ function renderSkills(){
           <button class="btn btn-primary btn-learn-sm" data-skill="${key}" ${disabled?'disabled':''}>${btnLabel}</button>
         </div>
         ${enhanceRow}
+        ${gemEnhanceRow}
       </div>
     `;
   }
 
+  const gemstoneHeaderHtml = `<div class="section-label" style="display:flex;justify-content:space-between;align-items:center;">
+      <span>보유 젬스톤: <span style="color:var(--c-epic, #b17dff);">${(state.gemstones||0).toLocaleString()}개</span></span>
+      <span style="font-size:10.5px;color:var(--text-dim);font-weight:normal;">몬스터 처치 시 낮은 확률로 획득 · 5차 스킬 전용 강화에 사용</span>
+    </div>`;
+
   document.getElementById('skillList').innerHTML =
+    gemstoneHeaderHtml +
     '<div class="section-label">패시브 스킬</div><div class="skill-grid">' + (passives.map(cardHtml).join('') || '<div style="font-size:12px;color:var(--text-dim);">표시할 패시브 스킬이 없습니다.</div>') + '</div>' +
     '<div class="section-label" style="margin-top:16px;">액티브 스킬 (마나 소모)</div><div class="skill-grid">' + (actives.map(cardHtml).join('') || '<div style="font-size:12px;color:var(--text-dim);">표시할 액티브 스킬이 없습니다.</div>') + '</div>';
 
   document.getElementById('skillList').querySelectorAll('button[data-skill]').forEach(btn=> btn.addEventListener('click', ()=> learnSkill(btn.dataset.skill)));
   document.getElementById('skillList').querySelectorAll('button[data-skill-enhance]').forEach(btn=> btn.addEventListener('click', ()=> enhanceTier4Skill(btn.dataset.skillEnhance)));
   document.getElementById('skillList').querySelectorAll('button[data-skill-enhance-bulk]').forEach(btn=> btn.addEventListener('click', ()=> bulkEnhanceTier4Skill(btn.dataset.skillEnhanceBulk)));
+  document.getElementById('skillList').querySelectorAll('button[data-skill-gem-enhance]').forEach(btn=> btn.addEventListener('click', ()=> gemEnhanceSkill(btn.dataset.skillGemEnhance)));
   renderSkillPriority();
 }
 let skillPriorityCategory = 'dungeon'; // 'dungeon' | 'boss' | 'tower'
@@ -5156,6 +6049,12 @@ function invMiniCardHtml(item, delta){
   } else if(item.kind === 'petscroll'){
     rarity = RARITY_BY_KEY[(PET_SCROLL_TIERS[item.tier]||{}).rarityKey]||RARITIES[0];
     optsText = `${rarity.label} 등급 펫 확정 획득`;
+  } else if(item.kind === 'animalScroll'){
+    rarity = RARITY_BY_KEY[item.rarityKey]||RARITIES[0];
+    optsText = `사육장 동물(닭/돼지/소 중 랜덤) ${rarity.label} 등급 획득`;
+  } else if(item.kind === 'divineScroll'){
+    rarity = RARITY_BY_KEY[item.rarityKey]||RARITIES[0];
+    optsText = `착용 장비 1개의 모든 부여옵션 수치 20~40% 증폭 (100% 확정 성공)`;
   } else {
     rarity = rarityOf(item);
     optsText = statLine(item, false);
@@ -5203,6 +6102,8 @@ function renderInvDetailPanel(baselineCP){
     : item.kind==='effectstone' ? (RARITY_BY_KEY[item.rarityKey]||RARITIES[0])
     : item.kind==='petgear' ? (RARITY_BY_KEY[item.rarityKey]||RARITIES[0])
     : item.kind==='petscroll' ? (RARITY_BY_KEY[(PET_SCROLL_TIERS[item.tier]||{}).rarityKey]||RARITIES[0])
+    : item.kind==='animalScroll' ? (RARITY_BY_KEY[item.rarityKey]||RARITIES[0])
+    : item.kind==='divineScroll' ? (RARITY_BY_KEY[item.rarityKey]||RARITIES[0])
     : rarityOf(item);
 
   if(!item.kind){
@@ -5300,6 +6201,12 @@ function renderInvDetailPanel(baselineCP){
     const tier = PET_SCROLL_TIERS[item.tier];
     bodyHtml = `<div style="font-size:11px;color:var(--text-dim);">사용 시 ${rarity.label} 등급 펫을 확정으로 획득합니다.</div>`;
     actionsHtml = `<button class="btn btn-primary" id="invDetailUsePetScrollBtn">사용하기</button>` + actionsHtml;
+  } else if(item.kind==='animalScroll'){
+    bodyHtml = `<div style="font-size:11px;color:var(--text-dim);">사용 시 사육장 동물(닭/돼지/소 중 랜덤) ${rarity.label} 등급을 확정으로 획득합니다. 획득한 동물은 사육장 탭에서 배치할 수 있습니다.</div>`;
+    actionsHtml = `<button class="btn btn-primary" id="invDetailUseAnimalScrollBtn">사용하기</button>` + actionsHtml;
+  } else if(item.kind==='divineScroll'){
+    bodyHtml = `<div style="font-size:11px;color:var(--text-dim);">농장에서만 얻을 수 있는 희귀 주문서입니다. 사용 시 착용 중인 장비 중 부여옵션이 있는 장비 1개를 무작위로 골라 모든 부여옵션 수치를 20~40% 증폭시킵니다. (100% 확정 성공)</div>`;
+    actionsHtml = `<button class="btn btn-primary" id="invDetailUseDivineScrollBtn">사용하기</button>` + actionsHtml;
   }
   panel.innerHTML = `
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
@@ -5314,6 +6221,10 @@ function renderInvDetailPanel(baselineCP){
   if(applyBtn) applyBtn.addEventListener('click', ()=> openApplyEquipModal(item.kind==='effectstone'?'stone':item.kind, item.id));
   const useScrollBtn = document.getElementById('invDetailUsePetScrollBtn');
   if(useScrollBtn) useScrollBtn.addEventListener('click', ()=> usePetSummonScroll(item.id));
+  const useAnimalScrollBtn = document.getElementById('invDetailUseAnimalScrollBtn');
+  if(useAnimalScrollBtn) useAnimalScrollBtn.addEventListener('click', ()=> useAnimalScroll(item.id));
+  const useDivineScrollBtn = document.getElementById('invDetailUseDivineScrollBtn');
+  if(useDivineScrollBtn) useDivineScrollBtn.addEventListener('click', ()=> useDivineScroll(item.id));
 }
 function renderPotionPanel(box){
   const now = Date.now();
@@ -5463,12 +6374,27 @@ function renderPetGearCard(item){
     if(k==='lifesteal') return `흡혈 +${v}%`;
     return `${STAT_LABEL[k]||k} +${v}`;
   }).join(' · ');
+  // [신규] 착용 중인 펫(최대 3마리) 중 같은 슬롯 장비를 낀 첫 번째 펫을 기준으로 전투력(CP) 변화를 미리 보여준다.
+  // (실제 장착은 각 펫 상세에서 이뤄지므로, 여기서는 참고용 예상치만 계산해 petGearCPDelta를 재사용한다.)
+  const refPetId = (state.equippedPets||[]).find(id=>{
+    const p = (state.pets||[]).find(pp=>pp.id===id);
+    return p; // 첫 번째 착용 펫 기준
+  });
+  let cpBadge = '';
+  if(refPetId){
+    const refPet = (state.pets||[]).find(p=>p.id===refPetId);
+    const cpDelta = petGearCPDelta(refPetId, item.slotType, item);
+    const cpColor = cpDelta>0?'var(--ok)':cpDelta<0?'var(--danger)':'var(--text-dim)';
+    const cpText = cpDelta>0?`전투력 +${cpDelta.toLocaleString()}`:cpDelta<0?`전투력 ${cpDelta.toLocaleString()}`:'전투력 변화 없음';
+    cpBadge = `<div class="compare-cp-badge" style="color:${cpColor};font-size:10px;margin-top:2px;">${refPet.name} 착용 시 ${cpText}</div>`;
+  }
   return `
     <div class="inv-item" style="border-left-color:${rarity.color};">
       <div class="inv-item-left">
         <div><span class="rarity-tag ${rarity.cls}">${rarity.label}</span><span style="font-size:11px;color:var(--text-dim);">펫 ${item.slotType==='necklace'?'목걸이':'옷'}</span></div>
         <div style="font-weight:700;font-size:12.5px;">${item.name}</div>
         <div style="font-size:10.5px;color:var(--text-dim);">${statText}</div>
+        ${cpBadge}
       </div>
       <div class="inv-item-actions">
         <button data-act="sell" data-id="${item.id}">판매</button>
@@ -5498,7 +6424,7 @@ function itemMatchesFilter(item){
   if(invFilter==='weapon') return item.type==='weapon';
   if(invFilter==='offhand') return item.type==='offhand';
   if(invFilter==='armor') return ['top','bottom','gloves','shoes','belt','hat','cloak'].includes(item.type);
-  if(invFilter==='accessory') return ['necklace','earring','ring','bracelet','eyewear','medal'].includes(item.type);
+  if(invFilter==='accessory') return ['necklace','earring','ring','bracelet','eyewear','medal','badge','title'].includes(item.type);
   return true;
 }
 
@@ -7743,7 +8669,12 @@ function learnSkill(key){
 /* =============================================================
    LEVELING (capped at 300, progressively harder)
    ============================================================= */
-function gainExp(amount){
+function gainExp(amount, opts){
+  // [신규] 농장 특수 보상으로 얻는 "경험치 3배" 버프가 활성 중이면 획득 경험치를 3배로 계산한다.
+  // 단, opts.skipExpBoost===true인 호출(예: 농장 수확 경험치)은 이 3배 버프의 영향을 받지 않는다.
+  // (농장 생산량 자체가 이미 레벨업 요구 경험치에 비례하도록 설계되어 있어, 버프까지 곱하면
+  //  버프->레벨업 가속->농장생산량 재증가로 이어지는 스노우볼 루프가 생기기 때문)
+  if(!(opts && opts.skipExpBoost === true) && state.expBoostUntil && Date.now() < state.expBoostUntil) amount = amount * 3;
   // 착용 중인 펫들도 함께 경험치를 얻어 성장한다 (레벨업 상한 도달 여부와 무관하게 항상 적용)
   if((state.equippedPets||[]).length){
     const petExpAmount = Math.round(amount * 0.4);
@@ -8578,28 +9509,35 @@ function freshCooldownState(){ return { cooldowns:{}, buffTurnsLeft:{}, buffCont
 // 시작하기 전에 파티원들이 보유한 버프형 스킬(kind:'active', buffType:'buff')을 미리 모아서 파티 전체에
 // 적용되는 공용 버프 배율을 계산해둔다. 완전한 실시간 동기화 엔진 대신, "대표 버프 스킬 효과의 일정
 // 비율을 파티 전체 보너스로 합산"하는 근사 방식으로 캐릭터 간 스킬 상호작용을 구현한다.
-// 협동(coop) 계열 5차 버프 스킬(vanguardOath/volleyCommand/arcaneWell/smokeVeil)을 보유한 파티원이 있으면
-// 그 스킬이 우선적으로(더 높은 비중으로) 파티 버프 계산에 반영된다.
+// [설계 변경] 협동(coop) 계열 5차 버프 스킬(vanguardOath/volleyCommand/arcaneWell/smokeVeil)이라고 해서
+// 파티 버프 채택에 우선순위를 주지 않는다. 협동 스킬이든 일반 버프 스킬이든 동등하게 취급하며,
+// 모든 파티원의 대표 버프 값을 모아 내림차순 정렬한 뒤, 1번째는 100%, 2번째는 50%, 3번째는 25%...
+// 식으로 체감(diminishing returns)시켜 합산한다. 협동 스킬 고유의 차별화 요소(레이드/월드보스 한정
+// 발동 등 raidOnly 조건)는 다른 곳에서 유지되며, 여기서는 우선순위를 두지 않는다.
 const PARTY_COOP_BUFF_SKILLS = ['warrior_vanguardOath','archer_volleyCommand','mage_arcaneWell','rogue_smokeVeil'];
 function computePartyBuffBonus(memberStates){
-  let atkPct = 0;
+  const memberBestVals = [];
   (memberStates||[]).forEach(s=>{
     if(!s || !s.job || !s.skills) return;
-    let best = 0, isCoop = false;
+    let best = 0;
     Object.keys(s.skills).forEach(key=>{
       const lv = s.skills[key];
       if(!lv) return;
       const def = SKILL_DEFS[key];
       if(!def || def.kind!=='active' || def.buffType!=='buff' || typeof def.buffMult!=='function') return;
       const val = def.buffMult(lv) || 0;
-      const coop = PARTY_COOP_BUFF_SKILLS.includes(key);
-      if(coop && (!isCoop || val>best)){ best = val; isCoop = true; }
-      else if(!isCoop && val>best){ best = val; }
+      // 협동 스킬 여부로 분기하지 않고, 파티원당 대표(최댓값) 버프 하나만 뽑는다.
+      if(val>best){ best = val; }
     });
-    if(best>0){
-      const share = isCoop ? 0.5 : 0.35; // 협동형 5차 버프 스킬은 파티 전체 반영 비중을 더 크게 준다
-      atkPct += best*share;
-    }
+    if(best>0) memberBestVals.push(best);
+  });
+  // 모든 버프를 균등한 기준(35%)으로 통일하고, 여러 개일 경우 체감 가중치(100%,50%,25%,...)로 합산한다.
+  memberBestVals.sort((a,b)=>b-a);
+  const SHARE = 0.35;
+  let atkPct = 0;
+  memberBestVals.forEach((val, idx)=>{
+    const diminish = Math.pow(0.5, idx); // 1번째 100%, 2번째 50%, 3번째 25% ...
+    atkPct += val * SHARE * diminish;
   });
   return { atkPct, defPct: atkPct*0.6 };
 }
@@ -8624,8 +9562,12 @@ function simulatePartyMemberOffline(s, name, slotId, enemyBase, timeLimitSec, pa
     // 레이드/월드보스 파티원 오프라인 시뮬레이션 구간이므로 협동(coop) 계열 5차 스킬이
     // RAID_CONTEXT_ACTIVE를 통해 강화된 효과로 계산되도록 플래그를 켠 채로 실행한다.
     RAID_CONTEXT_ACTIVE = true;
-    const result = simulateBattle(stats, s.skills, enemyForSim, s.job, hp, mana, s.potions, { hpKey: s.autoPotionHp, manaKey: s.autoPotionMana }, cooldownState, currentSkillPriorityOrder('boss'), remain);
-    RAID_CONTEXT_ACTIVE = false;
+    let result;
+    try{
+      result = simulateBattle(stats, s.skills, enemyForSim, s.job, hp, mana, s.potions, { hpKey: s.autoPotionHp, manaKey: s.autoPotionMana }, cooldownState, currentSkillPriorityOrder('boss'), remain);
+    } finally {
+      RAID_CONTEXT_ACTIVE = false;
+    }
     hp = result.endHp; mana = result.endMana;
     const lastEntry = result.log[result.log.length-1];
     const chunkDmg = lastEntry ? Math.max(0, enemyForSim.hp - lastEntry.enHp) : 0;
@@ -8791,6 +9733,19 @@ function finishWorldBossChallenge(){
     // 처치 즉시 다음 보스를 미리 생성해둔다 (처치 횟수만큼 더 강해진 상태로).
     state.expedition.worldBossInstance = generateWorldBoss();
   }
+  // [신규] 월드보스 칭호 드롭: 낮은 확률로 칭호를 획득한다. 누적 처치 횟수가 많을수록 확률/등급이 함께 좋아지고,
+  // 이번 판에서 가한 피해(기여도)가 클수록도 확률이 소폭 상승한다. 처치 성공 여부와 무관하게 참여만으로도 낮은 확률로 드롭된다.
+  let titleDrop = null;
+  {
+    const totalDefeats = state.expedition.worldBossTotalDefeats||0;
+    const contributionBonus = Math.min(0.02, Math.pow(totalDamage, 0.15) * 0.0004);
+    const titleDropChance = 0.02 + Math.min(0.05, totalDefeats*0.0006) + contributionBonus; // 기본 2% + 누적처치/기여도 보너스(최대 약 9%)
+    if(Math.random() < titleDropChance){
+      const titleRarity = rollWorldBossTitleRarity(totalDefeats);
+      titleDrop = generateWorldBossTitle(titleRarity, state.level);
+      state.inventory.push(titleDrop);
+    }
+  }
   if(box){
     box.innerHTML += `
       <div id="wbRewardBox">
@@ -8798,7 +9753,7 @@ function finishWorldBossChallenge(){
           <div class="title-win">${defeated?'월드보스 처치!':'제한시간 종료'}</div>
           <div class="reward-items">
             누적 피해량 ${totalDamage.toLocaleString()}<br>
-            골드 +${goldGain.toLocaleString()} · 보석 +${gemGain.toLocaleString()}${runeDrop?`<br>보스룬석 획득: ${escapeHtml(runeDrop.name)}`:''}${clearBonusText}<br>
+            골드 +${goldGain.toLocaleString()} · 보석 +${gemGain.toLocaleString()}${runeDrop?`<br>보스룬석 획득: ${escapeHtml(runeDrop.name)}`:''}${titleDrop?`<br><b style="color:${RARITY_BY_KEY[titleDrop.rarityKey].color};">칭호 획득: ${escapeHtml(titleDrop.name)}</b>`:''}${clearBonusText}<br>
             ${expLines.join(' · ')}<br>
             <span style="color:var(--text-dim);font-size:10.5px;">오늘 남은 도전 횟수: ${worldBossAttemptsLeft()}/${EXPED_CONFIG.WORLDBOSS_DAILY_LIMIT}</span>
           </div>
@@ -8982,8 +9937,12 @@ function runRaidChunk(){
   }
   // 본인의 레이드 전투 구간에서도 협동(coop) 계열 5차 스킬이 강화된 효과로 계산되도록 플래그를 켠다.
   RAID_CONTEXT_ACTIVE = true;
-  const result = simulateBattle(raidRun.playerStats, state.skills, raidRun.enemy, state.job, raidRun.hp, raidRun.mana, state.potions, { hpKey: state.autoPotionHp, manaKey: state.autoPotionMana }, raidRun.cooldownState, currentSkillPriorityOrder('boss'), EXPED_CONFIG.RAID_TIME_LIMIT_SEC);
-  RAID_CONTEXT_ACTIVE = false;
+  let result;
+  try{
+    result = simulateBattle(raidRun.playerStats, state.skills, raidRun.enemy, state.job, raidRun.hp, raidRun.mana, state.potions, { hpKey: state.autoPotionHp, manaKey: state.autoPotionMana }, raidRun.cooldownState, currentSkillPriorityOrder('boss'), EXPED_CONFIG.RAID_TIME_LIMIT_SEC);
+  } finally {
+    RAID_CONTEXT_ACTIVE = false;
+  }
   raidRun.hp = result.endHp; raidRun.mana = result.endMana;
   let i = 0;
   const comboState = { streak:0 };
@@ -9038,8 +9997,17 @@ function finishRaidChallenge(reason){
       if(!state.blessing) state.blessing = { count:0, stock:0 };
       state.blessing.stock = (state.blessing.stock||0) + blessingGain;
     }
+    // [신규] 레이드 뱃지 드롭: 클리어 시 낮은 확률(3~8%, 단계가 높을수록 소폭 상승)로 뱃지를 획득한다.
+    // 뱃지의 등급(rarity)은 별도 확률 테이블(RAID_BADGE_RARITY_TABLE)을 따르며, 단계가 높을수록 더 좋은 등급이 나온다.
+    let badgeDrop = null;
+    const badgeDropChance = 0.03 + (stageDef.stage-1)*0.0125; // 1단계 3% ~ 5단계 8%
+    if(Math.random() < badgeDropChance){
+      const badgeRarity = rollRaidBadgeRarity(stageDef.stage);
+      badgeDrop = generateRaidBadge(badgeRarity, state.level);
+      state.inventory.push(badgeDrop);
+    }
     rewardHtml = `골드 +${goldGain.toLocaleString()} · 경험치 +${expGain.toLocaleString()}<br>
-      정령의 힘 +${normalGain}${radiantGain?` · 찬란한 정령의 힘 +${radiantGain}`:''}${blessedGain?` · 축복받은 정령의 힘 +${blessedGain}`:''}${blessingGain?` · 축복 +${blessingGain}`:''}`;
+      정령의 힘 +${normalGain}${radiantGain?` · 찬란한 정령의 힘 +${radiantGain}`:''}${blessedGain?` · 축복받은 정령의 힘 +${blessedGain}`:''}${blessingGain?` · 축복 +${blessingGain}`:''}${badgeDrop?`<br><b style="color:${RARITY_BY_KEY[badgeDrop.rarityKey].color};">레이드 뱃지 획득: ${escapeHtml(badgeDrop.name)}</b>`:''}`;
   } else if(reason==='lose'){
     rewardHtml = '패배했습니다. 보상 없이 종료됩니다.';
   } else {
@@ -10237,12 +11205,38 @@ function renderMiningTab(){
   if(miningSubTab==='codex') renderMiningCodexSub();
   updateMiningBadge();
 }
+// [신규] 미장착 탐험 장비를 장착했을 때 실제 탐험 스탯(시간단축/드롭/추가획득, 상한 클램프 반영)이 얼마나 바뀌는지 미리 계산한다.
+// 정령/펫 장비 탭의 CP 비교 배지(petGearCPDelta, computeTotals 전/후 비교)와 동일한 방식으로,
+// 광산 장비는 캐릭터 CP가 아니라 computeMiningStats()에 반영되므로 이를 기준으로 비교한다.
+function miningGearStatDelta(g){
+  const m = state.mining;
+  if(m.equippedGear.includes(g.id)) return null; // 이미 장착 중이면 비교 불필요
+  const before = computeMiningStats();
+  const prevEquipped = m.equippedGear.slice();
+  m.equippedGear = prevEquipped.length>=3 ? prevEquipped.slice(0,2).concat(g.id) : prevEquipped.concat(g.id);
+  const after = computeMiningStats();
+  m.equippedGear = prevEquipped;
+  return { timePct: after.timePct-before.timePct, dropPct: after.dropPct-before.dropPct, bonusPct: after.bonusPct-before.bonusPct };
+}
+function miningGearStatDeltaHtml(g){
+  const d = miningGearStatDelta(g);
+  if(!d) return '';
+  const parts = [];
+  if(d.timePct) parts.push(`시간 ${d.timePct>0?'+':''}${Math.round(d.timePct*1000)/10}%`);
+  if(d.dropPct) parts.push(`드롭 ${d.dropPct>0?'+':''}${Math.round(d.dropPct*1000)/10}%`);
+  if(d.bonusPct) parts.push(`추가획득 ${d.bonusPct>0?'+':''}${Math.round(d.bonusPct*1000)/10}%`);
+  const hasAny = d.timePct || d.dropPct || d.bonusPct;
+  const color = hasAny ? 'var(--ok)' : 'var(--text-dim)';
+  const text = hasAny ? parts.join(' · ') : '탐험 스탯 변화 없음(상한 도달)';
+  return `<div class="compare-cp-badge" style="color:${color};font-size:10px;margin-top:2px;">장착 시 ${text}</div>`;
+}
 // 광산 장비(gear) 항목 하나를 카드 형태로 그려주는 공용 헬퍼. 가방/장비 탭에서 함께 사용한다.
 function miningGearCardHtml(g, equipped){
   const r = RARITY_BY_KEY[g.rarityKey];
   return `<div class="shop-item" style="${equipped?'border-color:var(--gold);':''}">
       <div class="shop-name"><span class="rarity-tag ${r.cls}">${r.label}</span> ${escapeHtml(g.name)}</div>
       <div class="shop-rate">${[g.timePct?`시간 -${Math.round(g.timePct*100)}%`:'',g.dropPct?`드롭 +${Math.round(g.dropPct*100)}%`:'',g.bonusPct?`추가획득 +${Math.round(g.bonusPct*100)}%`:''].filter(Boolean).join(' · ')}</div>
+      ${equipped ? '' : miningGearStatDeltaHtml(g)}
       <div style="display:flex;gap:4px;">
         <button class="btn ${equipped?'btn-danger':'btn-primary'}" style="flex:1;" data-toggle-gear="${g.id}">${equipped?'해제':'장착'}</button>
         ${equipped ? '' : `<button class="btn-icon" style="flex:1;" data-sell-gear="${g.id}">판매 (${miningSellPrice(g.rarityKey).toLocaleString()}G)</button>`}
@@ -10275,26 +11269,34 @@ function renderMiningGearSub(){
   `;
   bindMiningGearToggleButtons(box);
 }
+// [신규] 등급별 필터: 정령/펫 장비 탭(spiritGearFilter/petGearFilter)과 동일한 inv-filter 패턴을 재사용한다.
+let miningGearFilter = 'all'; // 광산(탐험) 장비 가방 탭 등급 필터: all/common/rare/epic/legendary/mythic
 // 광산 장비 가방 탭: 아직 장착하지 않은 보유 장비 목록 (여기서 바로 장착 가능)
 function renderMiningBagSub(){
   const box = document.getElementById('miningSubBag');
   if(!box) return;
   const m = state.mining;
   // 편의 개선: 등급이 높은 장비가 위로 오도록 정렬 (기존에는 획득 순서라 좋은 장비를 찾기 어려웠다)
-  const unequippedItems = m.gear.filter(g=> !m.equippedGear.includes(g.id))
+  const unequippedFullList = m.gear.filter(g=> !m.equippedGear.includes(g.id))
     .sort((a,b)=> (RARITY_MULT[b.rarityKey]||0) - (RARITY_MULT[a.rarityKey]||0));
+  const unequippedItems = unequippedFullList.filter(g=> miningGearFilter==='all' || g.rarityKey===miningGearFilter);
+  const miningFilterTabs = [['all','전체'],['common','일반'],['rare','희귀'],['epic','영웅'],['legendary','전설'],['mythic','신화']]
+    .map(([k,label])=> `<button class="${miningGearFilter===k?'active':''}" data-mining-gear-filter="${k}">${label}</button>`).join('');
+  const filterBar = unequippedFullList.length ? `<div class="inv-filter" style="margin-bottom:6px;">${miningFilterTabs}</div>` : '';
   const rows = unequippedItems.map(g=> miningGearCardHtml(g, false)).join('');
   box.innerHTML = `
     <div class="section-label" style="justify-content:space-between;">
-      <span>미장착 탐험 장비 (${unequippedItems.length}개)</span>
+      <span>미장착 탐험 장비 (${unequippedItems.length}/${unequippedFullList.length}개)</span>
     </div>
-    ${unequippedItems.length ? `<div style="display:flex;gap:6px;margin-bottom:8px;">
+    ${filterBar}
+    ${unequippedFullList.length ? `<div style="display:flex;gap:6px;margin-bottom:8px;">
       <button class="btn btn-secondary" style="flex:1;" data-bulk-gear="common">일반 일괄 판매</button>
       <button class="btn btn-secondary" style="flex:1;" data-bulk-gear="rare">희귀 이하 판매</button>
       <button class="btn btn-secondary" style="flex:1;" data-bulk-gear="epic">영웅 이하 판매</button>
     </div>` : ''}
-    <div class="shop-grid">${rows || '<div style="font-size:12px;color:var(--text-dim);">가방이 비어 있습니다. 탐험 상자에서 장비를 획득해보세요.</div>'}</div>
+    <div class="shop-grid">${rows || (unequippedFullList.length ? '<div style="font-size:12px;color:var(--text-dim);">선택한 등급의 탐험 장비가 없습니다.</div>' : '<div style="font-size:12px;color:var(--text-dim);">가방이 비어 있습니다. 탐험 상자에서 장비를 획득해보세요.</div>')}</div>
   `;
+  box.querySelectorAll('[data-mining-gear-filter]').forEach(btn=> btn.addEventListener('click', ()=>{ miningGearFilter = btn.dataset.miningGearFilter; renderMiningBagSub(); }));
   bindMiningGearToggleButtons(box);
 }
 // [성능 수정] 기존에는 전역 1초 인터벌이 이 함수를 매초 통째로 호출해서, 탐험 탭이 열려 있는 동안
@@ -10885,6 +11887,41 @@ function grantKillReward(monster, mult){
   const expGain = Math.round((monster.level*15 + randInt(0,10)) * (1+hunt.playerStats.expFindPct/100) * mult * specialExpMult * (isExpBoostActive()?EXP_BOOST_MULT:1));
   let gemGain = 0; if(Math.random()<0.3) gemGain = Math.round(randInt(20,60) * (1+(hunt.playerStats.gemFindPct||0)/100));
   let itemDrop = null; if(mult>=1 && Math.random()<0.06*specialDropMult) itemDrop = generateItem(null, bias, state.job, monster.level); // [밸런스 조정] 드롭률 9% -> 6%로 하향
+  // [신규] 젬스톤: 5차 스킬 전용 강화(gemEnhanceSkill)에 사용되는 재료. 몬스터 처치 시 낮은 확률로 드롭.
+  if(mult>=1 && Math.random()<0.04){
+    const gemGainAmt = randInt(1,2);
+    state.gemstones = (state.gemstones||0) + gemGainAmt;
+    hunt.totals.gemstones = (hunt.totals.gemstones||0) + gemGainAmt;
+  }
+  // [신규] 농장/사육장 재료: 몬스터 처치 시 낮은 확률로 나무/벽돌/씨앗/물/동물 주문서를 드롭한다.
+  if(mult>=1){
+    if(Math.random()<0.05){
+      const woodType = pick(FARM_WOOD_TYPES), qty = randInt(1,3);
+      state.farm.materials.wood[woodType] = (state.farm.materials.wood[woodType]||0) + qty;
+      hunt.totals.farmWood = (hunt.totals.farmWood||0) + qty;
+    }
+    if(Math.random()<0.04){
+      const qty = randInt(1,2);
+      state.farm.materials.brick = (state.farm.materials.brick||0) + qty;
+      hunt.totals.farmBrick = (hunt.totals.farmBrick||0) + qty;
+    }
+    if(Math.random()<0.05){
+      const seedType = pick(FARM_SEED_TYPES), qty = randInt(1,3);
+      state.farm.materials.seed[seedType] = (state.farm.materials.seed[seedType]||0) + qty;
+      hunt.totals.farmSeed = (hunt.totals.farmSeed||0) + qty;
+    }
+    if(Math.random()<0.06){
+      const qty = randInt(1,3);
+      state.farm.materials.water = (state.farm.materials.water||0) + qty;
+      hunt.totals.farmWater = (hunt.totals.farmWater||0) + qty;
+    }
+    if(Math.random()<0.02){
+      // 동물 주문서 등급: 던전 난이도(bias)와 몬스터 레벨에 약간 비례해서 고등급이 더 잘 나오도록 함
+      const scrollBias = bias + Math.floor(monster.level/30);
+      const scroll = generateAnimalScroll(rollRarity(scrollBias).key);
+      state.inventory.push(scroll); hunt.itemsGained.push(scroll);
+    }
+  }
   if(monster.isSpecialBoss){
     const bonusGold = Math.round(goldGain*2.5), bonusGems = Math.round(randInt(80,160)*(1+(hunt.playerStats.gemFindPct||0)/100));
     state.gold += bonusGold; state.gems += bonusGems;
@@ -11102,6 +12139,7 @@ function switchTab(tab, forcedCombatSub){
   if(tab === 'char'){ renderCharacter(); renderIdleExpPanel(); }
   if(tab === 'equip') renderCharacter();
   if(tab === 'pet') renderPetTab();
+  if(tab === 'farm') renderFarmTab();
   if(tab === 'spirit') renderSpiritTab();
   if(tab === 'skill') renderSkills();
   if(tab === 'inv') renderInventory();
@@ -11130,6 +12168,9 @@ function renderCombatTab(precomputed){
 }
 setInterval(()=>{
   if(document.hidden) return; // 탭이 백그라운드일 때는 불필요한 렌더링을 건너뛰어 자원을 아낀다
+  // 농장/사육장 생산량을 매초 갱신한다(내부적으로 경과시간 기반이라 매초 호출해도 무방).
+  if(state.farm) tickFarmProduction();
+  if(state.ranch) tickRanchProduction();
   const gachaTab = document.getElementById('tab-gacha');
   // 매초 전체 innerHTML을 재생성하지 않고 남은시간 텍스트만 가볍게 갱신한다
   if(gachaTab && !gachaTab.classList.contains('hidden')) updateBoosterShopTimer();
@@ -11862,7 +12903,14 @@ on('saveBtn', 'click', async ()=>{
 });
 on('backupBtn', 'click', ()=> showBackupModal());
 on('authBtn', 'click', ()=>{
-  if(!window.netlifyIdentity){ showToast('로그인 기능을 사용할 수 없습니다', true); return; }
+  if(identityUnavailable || !window.netlifyIdentity){
+    showToast('이 브라우저에서는 로그인 기능을 사용할 수 없습니다. 로컬 저장은 정상 작동합니다', true);
+    return;
+  }
+  if(cloudSyncActiveCount > 0){
+    showToast('클라우드와 동기화 중입니다. 잠시 후 다시 시도해주세요', true);
+    return;
+  }
   if(cloudUser) netlifyIdentity.logout();
   else netlifyIdentity.open('login');
 });
@@ -11878,6 +12926,71 @@ on('petSubTabs', 'click', (e)=>{
   if(!btn) return;
   petSubTab = btn.dataset.petsub;
   renderPetTab();
+});
+on('farmSubTabs', 'click', (e)=>{
+  const btn = e.target.closest('button[data-farmsub]');
+  if(!btn) return;
+  farmSubTab = btn.dataset.farmsub;
+  farmPlantPickerMode = null;
+  renderFarmTab();
+});
+on('farmSubFarm', 'click', (e)=>{
+  const btn = e.target.closest('button');
+  if(!btn) return;
+  if(btn.id === 'farmUpgradeBtn'){
+    const res = upgradeFarmLevel();
+    if(res && res.ok) showToast(`농장이 Lv.${state.farm.level}로 강화되었습니다`);
+    else showToast('강화에 필요한 재료가 부족합니다', true);
+    renderFarmSub();
+    return;
+  }
+  if(btn.id === 'farmHarvestBtn'){
+    const res = harvestFarm();
+    if(res.gold>0 || res.exp>0 || res.gems>0){
+      showToast(`수거 완료: 골드 +${res.gold.toLocaleString()} · 경험치 +${res.exp.toLocaleString()} · 보석 +${res.gems.toLocaleString()}`);
+      if(typeof renderAll==='function') renderAll();
+    } else {
+      showToast('수거할 보상이 없습니다', true);
+    }
+    renderFarmSub();
+    return;
+  }
+  if(btn.id === 'farmOpenPlantCropBtn'){
+    farmPlantPickerMode = (farmPlantPickerMode==='crop') ? null : 'crop';
+    renderFarmSub();
+    return;
+  }
+  if(btn.id === 'farmOpenPlantTreeBtn'){
+    farmPlantPickerMode = (farmPlantPickerMode==='tree') ? null : 'tree';
+    renderFarmSub();
+    return;
+  }
+  if(btn.dataset.farmPlantSeed){
+    const res = plantCrop(btn.dataset.farmPlantSeed);
+    if(res && res.ok){ showToast('작물을 심었습니다'); farmPlantPickerMode = null; }
+    else showToast(res && res.reason ? res.reason : '심기에 실패했습니다', true);
+    renderFarmSub();
+    return;
+  }
+  if(btn.dataset.farmPlantWood){
+    const res = plantTree(btn.dataset.farmPlantWood);
+    if(res && res.ok){ showToast('나무를 심었습니다'); farmPlantPickerMode = null; }
+    else showToast(res && res.reason ? res.reason : '심기에 실패했습니다', true);
+    renderFarmSub();
+    return;
+  }
+  if(btn.dataset.farmRemove){
+    removeFarmPlot(btn.dataset.farmRemove);
+    renderFarmSub();
+    return;
+  }
+  if(btn.dataset.farmEnhance){
+    const res = enhanceFarmPlot(btn.dataset.farmEnhance);
+    if(res && res.ok) showToast(`강화 성공! (Lv.${res.plot.enhanceLevel})`);
+    else showToast((res && res.reason) ? res.reason : '강화에 실패했습니다', true);
+    renderFarmSub();
+    return;
+  }
 });
 on('spiritSubTabs', 'click', (e)=>{
   const btn = e.target.closest('button[data-spiritsub]');

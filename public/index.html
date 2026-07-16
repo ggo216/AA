@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>엘드리아 연대기 - 캐릭터 육성 RPG</title>
+<title>AA</title>
 <script src="https://identity.netlify.com/v1/netlify-identity-widget.js"></script>
 <script>
 // 화면이 그려지기 전에 저장된 테마를 먼저 적용해, 다크→화이트로 전환되는 깜빡임(FOUC)을 막는다.
@@ -132,14 +132,14 @@
     display:flex;align-items:center;gap:4px;opacity:.85;}
   .title .logo-mark{width:13px;height:13px;flex-shrink:0;filter:drop-shadow(0 0 3px rgba(109,184,242,.5));}
   .title small{display:none;}
-  .header-right{display:flex;flex-direction:row;align-items:center;gap:8px;}
+  .header-right{display:flex;flex-direction:row;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end;}
   .currencies{display:flex;gap:6px;flex-wrap:wrap;}
-  .currency{display:flex;align-items:center;gap:4px;background:var(--bg-inset);border:1px solid var(--border-soft);border-radius:20px;padding:3px 8px;font-size:11px;font-weight:700;max-width:100%;overflow-wrap:anywhere;}
+  .currency{display:flex;align-items:center;gap:4px;background:var(--bg-inset);border:1px solid var(--border-soft);border-radius:20px;padding:3px 8px;font-size:11px;font-weight:700;max-width:100%;white-space:nowrap;flex-shrink:0;}
   .coin-dot{width:9px;height:9px;border-radius:50%;background:var(--gold);box-shadow:0 0 8px var(--gold);}
   .gem-dot{width:9px;height:9px;border-radius:2px;transform:rotate(45deg);background:var(--c-epic);box-shadow:0 0 8px var(--c-epic);}
   .sp-dot{width:9px;height:9px;border-radius:2px;background:var(--ok);box-shadow:0 0 8px var(--ok);}
-  .header-actions{display:flex;gap:4px;}
-  .btn-icon{background:var(--bg-inset);border:1px solid var(--border-soft);color:var(--text-dim);border-radius:7px;padding:4px 8px;font-size:10px;cursor:pointer;font-family:'Gowun Dodum';}
+  .header-actions{display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end;}
+  .btn-icon{background:var(--bg-inset);border:1px solid var(--border-soft);color:var(--text-dim);border-radius:7px;padding:4px 8px;font-size:10px;cursor:pointer;font-family:'Gowun Dodum';white-space:nowrap;flex-shrink:0;max-width:120px;overflow:hidden;text-overflow:ellipsis;}
   .btn-icon.active-toggle{background:rgba(109,184,242,.18);border-color:var(--accent);color:var(--accent);}
   .btn-icon:hover{color:var(--gold);border-color:var(--gold-dim);}
 
@@ -432,7 +432,7 @@
   /* 룬/효과석/주문서 적용 행: 아이콘-라벨-버튼을 동일한 그리드로 정렬해 버튼이 항상 같은 위치에 오도록 함 */
   .socket-row{display:grid;grid-template-columns:22px 1fr auto;align-items:center;gap:8px;margin-top:6px;}
   .socket-row-label{font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-  .socket-row-action{display:flex;justify-content:flex-end;}
+  .socket-row-action{display:flex;justify-content:flex-end;gap:4px;flex-wrap:wrap;}
   /* 장비 슬롯 그리드 내 룬/효과석 장착 표시: 텍스트 배지 대신 작은 아이콘으로 표시 */
   .slot-socket-icons{position:absolute;top:4px;left:5px;display:flex;flex-direction:column;gap:2px;align-items:center;z-index:1;}
   .slot-socket-icons .socket-icon{width:11px;height:11px;border-radius:3px;}
@@ -606,7 +606,7 @@
 <div class="app">
 
   <div class="header">
-    <div class="title"><svg class="logo-mark" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 1L14.7 8.6L22.5 9.3L16.6 14.4L18.4 22L12 17.8L5.6 22L7.4 14.4L1.5 9.3L9.3 8.6L12 1Z" fill="currentColor" style="color:var(--gold);"/></svg>엘드리아 연대기</div>
+    <div class="title"><svg class="logo-mark" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 1L14.7 8.6L22.5 9.3L16.6 14.4L18.4 22L12 17.8L5.6 22L7.4 14.4L1.5 9.3L9.3 8.6L12 1Z" fill="currentColor" style="color:var(--gold);"/></svg>AA</div>
     <div class="header-right">
       <div class="currencies">
         <div class="currency"><span class="coin-dot"></span><span id="goldText">0</span></div>
@@ -2880,6 +2880,10 @@ if(typeof window !== 'undefined' && window.netlifyIdentity){
     // 기존 코드는 'login' 시점에만 handleCloudLoginSync를 호출했기 때문에, 이미 로그인된
     // 상태로 페이지를 새로고침한 경우에는 클라우드 동기화 체크가 아예 실행되지 않았다.
     if(cloudUser) handleCloudLoginSync();
+    // 로그인되어 있지 않다면, 다른 화면(캐릭터 선택 등)보다 로그인 창이 먼저 눈에 띄도록
+    // 페이지 로드 시점에 로그인 위젯을 자동으로 열어준다. 유저는 닫기(X) 버튼으로
+    // 언제든 건너뛰고 로컬로만 플레이할 수 있다.
+    else netlifyIdentity.open('login');
   });
   netlifyIdentity.on('login', user=>{
     cloudUser = user;
@@ -4223,11 +4227,11 @@ function renderPetInfoBox(){
     const label = slot==='necklace' ? '목걸이' : '옷';
     const owned = state.inventory.filter(i=>i.kind==='petgear' && i.slotType===slot);
     return `<div class="pet-gear-row" style="flex-direction:column;align-items:stretch;gap:2px;">
-      <div style="display:flex;align-items:center;gap:6px;">
-        <div style="font-size:11px;flex:1;color:${gear?'var(--gold)':'var(--text-dim)'};">${label}: ${gear ? escapeHtml(gear.name) : '없음'}</div>
+      <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+        <div style="font-size:11px;flex:1;min-width:80px;color:${gear?'var(--gold)':'var(--text-dim)'};">${label}: ${gear ? escapeHtml(gear.name) : '없음'}</div>
         ${gear
-          ? `${owned.length ? `<button class="btn-icon" data-pet-gear-swap="${slot}">교체</button>` : ''}<button class="btn-icon" data-pet-gear-off="${slot}">해제</button>`
-          : (owned.length ? `<button class="btn-icon" data-pet-gear-pick="${slot}">장착</button>` : '')}
+          ? `${owned.length ? `<button class="btn-icon" data-pet-gear-swap="${slot}" style="flex-shrink:0;">교체</button>` : ''}<button class="btn-icon" data-pet-gear-off="${slot}" style="flex-shrink:0;">해제</button>`
+          : (owned.length ? `<button class="btn-icon" data-pet-gear-pick="${slot}" style="flex-shrink:0;">장착</button>` : '')}
       </div>
       ${gear ? `<div style="font-size:9.5px;color:var(--text-dim);padding-left:2px;">${petGearStatsText(gear)}${gear.affixes && gear.affixes.length ? ' · '+petGearAffixText(gear) : ''}</div>` : ''}
     </div>`;

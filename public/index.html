@@ -770,8 +770,8 @@
   <div id="tab-farm" class="tab-content hidden">
     <div class="panel">
       <div class="skill-tier-tabs" id="farmSubTabs">
-        <button data-farmsub="farm" class="active">농장</button>
-        <button data-farmsub="ranch">사육장</button>
+        <button data-farmsub="farm" class="active">🌾 농장</button>
+        <button data-farmsub="ranch">🐄 사육장</button>
       </div>
       <div id="farmSubFarm" class="pet-subpanel"></div>
       <div id="farmSubRanch" class="pet-subpanel hidden"></div>
@@ -3123,10 +3123,14 @@ function rarityOf(item){ return RARITY_BY_KEY[item.rarityKey]; }
    등급 체계는 기존 RARITY_MULT/RARITY_BY_KEY(common/rare/epic/legendary/mythic)를 그대로 재사용한다.
    ============================================================= */
 const FARM_WOOD_TYPES = ['oak','pine','birch','mahogany','ironwood'];
-const FARM_WOOD_LABEL = { oak:'참나무', pine:'소나무', birch:'자작나무', mahogany:'마호가니', ironwood:'철목' };
+const FARM_WOOD_LABEL = { oak:'🪵 참나무', pine:'🪵 소나무', birch:'🪵 자작나무', mahogany:'🪵 마호가니', ironwood:'🪵 철목' };
 const FARM_SEED_TYPES = ['sunflowerSeed','sageLeafSeed','gemFlowerSeed','strengthRootSeed','vitalityVineSeed'];
-const FARM_SEED_LABEL = { sunflowerSeed:'해바라기씨', sageLeafSeed:'지혜잎씨앗', gemFlowerSeed:'보석꽃씨앗', strengthRootSeed:'力뿌리씨앗', vitalityVineSeed:'생명덩굴씨앗' };
+const FARM_SEED_LABEL = { sunflowerSeed:'🌱 해바라기씨', sageLeafSeed:'🌱 지혜잎씨앗', gemFlowerSeed:'🌱 보석꽃씨앗', strengthRootSeed:'🌱 힘뿌리씨앗', vitalityVineSeed:'🌱 생명덩굴씨앗' };
 
+// [밸런스 너프] 농장/사육장 초당 생산량이 전반적으로 과했다는 피드백에 따라, 실제 누적 계산 시점에
+// 전체 생산량에 곱해지는 중앙 감쇠 배율. 개별 작물/나무/동물 정의를 일일이 건드리지 않고 한 곳에서
+// 일괄 조정할 수 있도록 tickFarmProduction/tickRanchProduction에서만 사용한다.
+const FARM_PRODUCTION_NERF_MULT = 1/6;
 // 작물(crop) 정의: 씨앗(FARM_SEED_TYPES 중 하나)을 소모해 심는다.
 // kind:'reward' -> 초당 골드/경험치/보석을 farm.pending*에 누적 + 농장 전체 보상 보너스%(bonusPct)를 제공
 // kind:'combat'  -> 전투 스탯(statKey)을 statAmt(rarityKey)만큼 영구 제공 (심어져 있는 동안 적용)
@@ -3139,7 +3143,7 @@ const FARM_CROP_DEFS = {
                     perSecondAmt:(rk)=> 0.0006 * (RARITY_MULT[rk]||1), bonusPct:(rk)=> 1 * (RARITY_MULT[rk]||1) },
   gemFlower:      { name:'보석꽃',     kind:'reward', rewardType:'gem',  seedType:'gemFlowerSeed',
                     perSecondAmt:(rk)=> Math.max(1, Math.round(0.2 * (RARITY_MULT[rk]||1))), bonusPct:(rk)=> 1.2 * (RARITY_MULT[rk]||1) },
-  strengthRoot:   { name:'力의 뿌리',  kind:'combat', statKey:'str', seedType:'strengthRootSeed',
+  strengthRoot:   { name:'힘의 뿌리',  kind:'combat', statKey:'str', seedType:'strengthRootSeed',
                     statAmt:(rk)=> Math.round(2 * (RARITY_MULT[rk]||1)) },
   vitalityVine:   { name:'생명덩굴',   kind:'combat', statKey:'vit', seedType:'vitalityVineSeed',
                     statAmt:(rk)=> Math.round(2 * (RARITY_MULT[rk]||1)) }
@@ -3162,10 +3166,10 @@ const FARM_TREE_DEFS = {
 
 // 사육장 동물 정의: 닭=골드, 돼지=경험치, 소=보석을 초당 생산. 등급별 baseAmt 배율 차등.
 const FARM_ANIMAL_DEFS = {
-  chicken: { name:'닭', rewardType:'gold', baseAmt:(rk)=> Math.round(2.5 * (RARITY_MULT[rk]||1)) },
+  chicken: { name:'🐔 닭', rewardType:'gold', baseAmt:(rk)=> Math.round(2.5 * (RARITY_MULT[rk]||1)) },
   // pig도 rewardType==='exp'이므로 baseAmt는 "현재 레벨 경험치 요구량 대비 초당 비율"을 반환한다 (절대치 아님).
-  pig:     { name:'돼지', rewardType:'exp', baseAmt:(rk)=> 0.00072 * (RARITY_MULT[rk]||1) },
-  cow:     { name:'소', rewardType:'gem', baseAmt:(rk)=> Math.max(1, Math.round(0.25 * (RARITY_MULT[rk]||1))) }
+  pig:     { name:'🐖 돼지', rewardType:'exp', baseAmt:(rk)=> 0.00072 * (RARITY_MULT[rk]||1) },
+  cow:     { name:'🐄 소', rewardType:'gem', baseAmt:(rk)=> Math.max(1, Math.round(0.25 * (RARITY_MULT[rk]||1))) }
 };
 const FARM_ANIMAL_KEYS = Object.keys(FARM_ANIMAL_DEFS);
 // 농장/사육장의 오프라인 생산 계산 시, 너무 오랜 기간 방치되었을 때 한 번에 비정상적으로 큰 값이 쌓이는 것을
@@ -3317,7 +3321,7 @@ function tickFarmProduction(){
       const baseAmt = def.rewardType==='exp'
         ? expNeeded(state.level) * def.perSecondAmt(p.rarityKey)
         : def.perSecondAmt(p.rarityKey);
-      const amt = baseAmt * elapsedSec * bonusMult * enhanceMult;
+      const amt = baseAmt * elapsedSec * bonusMult * enhanceMult * FARM_PRODUCTION_NERF_MULT;
       if(def.rewardType==='gold') gold += amt;
       else if(def.rewardType==='exp') exp += amt;
       else if(def.rewardType==='gem') gems += amt;
@@ -3384,7 +3388,7 @@ function grantFarmSpecialDrop(plot){
     msg = `정령의 힘 ${count}개`;
   } else if(type==='divineScroll'){
     for(let i=0;i<count;i++) state.inventory.push(createDivineScroll());
-    msg = `신성한 장비 주문서 ${count}개`;
+    msg = `✨ 신성한 장비 주문서 ${count}개`;
   }
   showToast(`[농장] ${rarityLabel} 등급 ${plotName}에서 특수 보상 획득! ${msg}`);
 }
@@ -3446,7 +3450,7 @@ function tickRanchProduction(){
     const baseAmt = def.rewardType==='exp'
       ? expNeeded(state.level) * def.baseAmt(a.rarityKey)
       : def.baseAmt(a.rarityKey);
-    const amt = baseAmt * elapsedSec * bonusMult;
+    const amt = baseAmt * elapsedSec * bonusMult * FARM_PRODUCTION_NERF_MULT;
     if(def.rewardType==='gold') gold += amt;
     else if(def.rewardType==='exp') exp += amt;
     else if(def.rewardType==='gem') gems += amt;
@@ -3486,7 +3490,7 @@ function useAnimalScroll(itemId){
 // [신규] 농장 특수 보상으로만 획득 가능한 인벤토리 아이템(kind:'divineScroll'). 사용 시 착용 중인 장비 중 부여효과가 있는
 // 장비 1개를 무작위로 골라 모든 부여옵션(affixes/additionalOptions) 수치를 20~40% 증폭시키는 100% 확정 성공 주문서.
 function createDivineScroll(){
-  return { id:uid(), kind:'divineScroll', rarityKey:'legendary', name:'신성한 장비 주문서' };
+  return { id:uid(), kind:'divineScroll', rarityKey:'legendary', name:'✨ 신성한 장비 주문서' };
 }
 // 인벤토리에서 신성한 장비 주문서(kind:'divineScroll') 사용: 착용 중인 장비 중 affixes 또는 additionalOptions가 있는
 // 장비를 무작위로 1개 골라 각 옵션 수치를 20~40% 증폭시킨다. 100% 확정 성공(실패 없음).
@@ -4392,7 +4396,7 @@ function renderRanchSub(){
     const def = FARM_ANIMAL_DEFS[a.kind] || {};
     // pig(exp)는 baseAmt가 "현재 레벨 경험치 요구량 대비 초당 비율"이므로 expNeeded(state.level)을 곱해 미리보기 표시.
     const baseAmtVal = def.baseAmt ? (def.rewardType==='exp' ? expNeeded(state.level) * def.baseAmt(a.rarityKey) : def.baseAmt(a.rarityKey)) : 0;
-    const perSec = baseAmtVal * (1+bonusPct/100);
+    const perSec = baseAmtVal * (1+bonusPct/100) * FARM_PRODUCTION_NERF_MULT;
     const rewardLabel = FARM_REWARD_LABEL[def.rewardType] || '';
     return `<div class="stat-box" style="margin-bottom:8px;">
       <div style="display:flex;align-items:center;gap:6px;">
@@ -4411,24 +4415,24 @@ function renderRanchSub(){
     : `<div style="font-size:11px;color:var(--text-dim);padding:8px 0;">보유한 미배치 동물이 없습니다. 던전에서 동물 주문서를 얻어 가방에서 사용해보세요.</div>`;
   const html = `
     <div class="stat-box" style="margin-bottom:10px;">
-      <div class="stat-label">사육장 레벨</div>
+      <div class="stat-label">🐄 사육장 레벨</div>
       <div class="stat-val" style="font-size:15px;">Lv.${ranch.level} <span style="font-size:10.5px;color:var(--text-dim);font-weight:400;">(정원 ${placed.length}/${cap} · 보너스 +${bonusPct}%)</span></div>
-      <div style="font-size:10.5px;color:var(--text-dim);margin-top:4px;">강화 필요 재료: 벽돌 ${haveBrick}/${cost}</div>
-      <button class="btn btn-primary" id="ranchUpgradeBtn" style="margin-top:7px;font-size:10.5px;padding:5px 10px;" ${canUpgrade?'':'disabled'}>사육장 강화</button>
+      <div style="font-size:10.5px;color:var(--text-dim);margin-top:4px;">강화 필요 재료: 🧱 벽돌 ${haveBrick}/${cost}</div>
+      <button class="btn btn-primary" id="ranchUpgradeBtn" style="margin-top:7px;font-size:10.5px;padding:5px 10px;" ${canUpgrade?'':'disabled'}>⬆️ 사육장 강화</button>
     </div>
     <div class="section-label" style="margin-top:12px;justify-content:space-between;">
-      <span>미수거 보상</span>
+      <span>📥 미수거 보상</span>
     </div>
     <div style="font-size:11px;color:var(--text-dim);">
-      골드 +${pendingGold.toLocaleString()} · 경험치 +${pendingExp.toLocaleString()} · 보석 +${pendingGems.toLocaleString()}
+      🪙 골드 +${pendingGold.toLocaleString()} · 📖 경험치 +${pendingExp.toLocaleString()} · 💎 보석 +${pendingGems.toLocaleString()}
     </div>
-    <button class="btn btn-primary btn-block" id="ranchHarvestBtn" style="margin-top:6px;" ${canHarvest?'':'disabled'}>수거하기</button>
+    <button class="btn btn-primary btn-block" id="ranchHarvestBtn" style="margin-top:6px;" ${canHarvest?'':'disabled'}>🧺 수거하기</button>
     <div class="section-label" style="margin-top:12px;">
-      <span>배치된 동물 (${placed.length}/${cap})</span>
+      <span>🐄 배치된 동물 (${placed.length}/${cap})</span>
     </div>
     ${placedHtml}
     <div class="section-label" style="margin-top:12px;">
-      <span>보유 중인 미배치 동물 (${unplaced.length})</span>
+      <span>🐔 보유 중인 미배치 동물 (${unplaced.length})</span>
     </div>
     ${unplacedHtml}
   `;
@@ -4465,32 +4469,33 @@ function renderRanchSub(){
 }
 
 function farmDefOf(plot){ return plot.kind==='crop' ? FARM_CROP_DEFS[plot.typeKey] : FARM_TREE_DEFS[plot.typeKey]; }
-const FARM_REWARD_LABEL = { gold:'골드', exp:'경험치', gem:'보석' };
+const FARM_REWARD_LABEL = { gold:'🪙 골드', exp:'📖 경험치', gem:'💎 보석' };
 
 function farmPlotCardHtml(plot){
   const def = farmDefOf(plot);
   if(!def) return '';
   const rarity = RARITY_BY_KEY[plot.rarityKey] || RARITIES[0];
+  const kindIcon = plot.kind==='crop' ? '🌾' : '🌳';
   const kindLabel = plot.kind==='crop' ? '작물' : '나무';
   const enhanceLevel = plot.enhanceLevel||0;
   const enhanceMult = 1 + enhanceLevel * 0.05;
   let effectHtml = '';
   if(def.kind==='reward'){
     // exp 보상은 perSecondAmt가 "현재 레벨 경험치 요구량 대비 초당 비율"이므로 expNeeded(state.level)을 곱해 미리보기 표시.
-    const perSec = (def.rewardType==='exp' ? expNeeded(state.level) * def.perSecondAmt(plot.rarityKey) : def.perSecondAmt(plot.rarityKey)) * enhanceMult;
+    const perSec = (def.rewardType==='exp' ? expNeeded(state.level) * def.perSecondAmt(plot.rarityKey) : def.perSecondAmt(plot.rarityKey)) * enhanceMult * FARM_PRODUCTION_NERF_MULT;
     const bonus = def.bonusPct(plot.rarityKey);
-    effectHtml = `<div style="font-size:10.5px;color:var(--text-dim);">${FARM_REWARD_LABEL[def.rewardType]||def.rewardType} 초당 +${perSec.toLocaleString(undefined,{maximumFractionDigits:2})}<br>농장 보너스 +${bonus.toFixed(1)}%</div>`;
+    effectHtml = `<div style="font-size:10.5px;color:var(--text-dim);">${FARM_REWARD_LABEL[def.rewardType]||def.rewardType} 초당 +${perSec.toLocaleString(undefined,{maximumFractionDigits:2})}<br>⬆️ 농장 보너스 +${bonus.toFixed(1)}%</div>`;
   } else {
     const amt = def.statAmt(plot.rarityKey) * enhanceMult;
-    effectHtml = `<div style="font-size:10.5px;color:var(--text-dim);">${STAT_LABEL[def.statKey]||def.statKey} +${amt.toLocaleString(undefined,{maximumFractionDigits:2})}</div>`;
+    effectHtml = `<div style="font-size:10.5px;color:var(--text-dim);">⚔️ ${STAT_LABEL[def.statKey]||def.statKey} +${amt.toLocaleString(undefined,{maximumFractionDigits:2})}</div>`;
   }
   const enhanceCost = plotEnhanceCost(plot);
   return `<div class="farm-plot-card" style="border-color:${rarity.color};">
-    <div><span class="rarity-tag ${rarity.cls}" style="font-size:8px;">${rarity.label}</span> <span style="font-size:9.5px;color:var(--text-dim);">${kindLabel} · ${def.kind==='reward'?'보상형':'전투형'}</span></div>
-    <div style="font-weight:700;font-size:12.5px;margin:2px 0;">${escapeHtml(def.name)} <span style="font-size:9.5px;color:var(--text-dim);font-weight:400;">강화 +${enhanceLevel}</span></div>
+    <div><span class="rarity-tag ${rarity.cls}" style="font-size:8px;">${rarity.label}</span> <span style="font-size:9.5px;color:var(--text-dim);">${kindIcon} ${kindLabel} · ${def.kind==='reward'?'🪙 보상형':'⚔️ 전투형'}</span></div>
+    <div style="font-weight:700;font-size:12.5px;margin:2px 0;">${kindIcon} ${escapeHtml(def.name)} <span style="font-size:9.5px;color:var(--text-dim);font-weight:400;">강화 +${enhanceLevel}</span></div>
     ${effectHtml}
     <div style="display:flex;gap:5px;margin-top:5px;">
-      <button class="btn btn-primary" data-farm-enhance="${plot.id}" style="font-size:9px;padding:3px 7px;">물로 강화 (물 ${enhanceCost})</button>
+      <button class="btn btn-primary" data-farm-enhance="${plot.id}" style="font-size:9px;padding:3px 7px;">💧 물로 강화 (물 ${enhanceCost})</button>
       <button class="btn btn-danger" data-farm-remove="${plot.id}" style="font-size:9px;padding:3px 7px;">제거</button>
     </div>
   </div>`;
@@ -4500,11 +4505,11 @@ function farmMaterialSummaryHtml(){
   const mat = state.farm.materials;
   const woodParts = FARM_WOOD_TYPES.map(k=> `${FARM_WOOD_LABEL[k]} ${(mat.wood[k]||0).toLocaleString()}`).join(' · ');
   const seedParts = FARM_SEED_TYPES.map(k=> `${FARM_SEED_LABEL[k]} ${(mat.seed[k]||0).toLocaleString()}`).join(' · ');
-  return `<div class="section-label"><span>보유 재료</span></div>
+  return `<div class="section-label"><span>🧺 보유 재료</span></div>
     <div style="font-size:10.5px;color:var(--text-dim);line-height:1.7;">
       나무: ${woodParts}<br>
       씨앗: ${seedParts}<br>
-      벽돌: ${(mat.brick||0).toLocaleString()} · 물: ${(mat.water||0).toLocaleString()}
+      🧱 벽돌: ${(mat.brick||0).toLocaleString()} · 💧 물: ${(mat.water||0).toLocaleString()}
     </div>`;
 }
 
@@ -4548,27 +4553,27 @@ function renderFarmSub(){
     : `<div style="font-size:11px;color:var(--text-dim);padding:8px 0;">심어진 작물/나무가 없습니다.</div>`;
   const html = `
     <div class="stat-box" style="margin-bottom:10px;">
-      <div class="stat-label">농장 레벨</div>
+      <div class="stat-label">🌾 농장 레벨</div>
       <div class="stat-val" style="font-size:15px;">Lv.${farm.level} <span style="font-size:10.5px;color:var(--text-dim);font-weight:400;">(슬롯 ${farm.plots.length}/${cap})</span></div>
       <div style="font-size:10.5px;color:var(--text-dim);margin-top:4px;">
-        강화 필요 재료: 나무 ${haveWood}/${cost.wood} · 벽돌 ${(mat.brick||0)}/${cost.brick} · 씨앗 ${haveSeed}/${cost.seed} · 물 ${(mat.water||0)}/${cost.water}
+        강화 필요 재료: 🪵 나무 ${haveWood}/${cost.wood} · 🧱 벽돌 ${(mat.brick||0)}/${cost.brick} · 🌱 씨앗 ${haveSeed}/${cost.seed} · 💧 물 ${(mat.water||0)}/${cost.water}
       </div>
-      <button class="btn btn-primary" id="farmUpgradeBtn" style="margin-top:7px;font-size:10.5px;padding:5px 10px;" ${canUpgrade?'':'disabled'}>농장 강화</button>
+      <button class="btn btn-primary" id="farmUpgradeBtn" style="margin-top:7px;font-size:10.5px;padding:5px 10px;" ${canUpgrade?'':'disabled'}>⬆️ 농장 강화</button>
     </div>
     ${farmMaterialSummaryHtml()}
     <div class="section-label" style="margin-top:12px;justify-content:space-between;">
-      <span>미수거 보상</span>
+      <span>📥 미수거 보상</span>
     </div>
     <div style="font-size:11px;color:var(--text-dim);">
-      골드 +${pendingGold.toLocaleString()} · 경험치 +${pendingExp.toLocaleString()} · 보석 +${pendingGems.toLocaleString()}
+      🪙 골드 +${pendingGold.toLocaleString()} · 📖 경험치 +${pendingExp.toLocaleString()} · 💎 보석 +${pendingGems.toLocaleString()}
     </div>
     ${accrualHtml}
-    <button class="btn btn-primary btn-block" id="farmHarvestBtn" style="margin-top:6px;" ${canHarvest?'':'disabled'}>수거하기</button>
+    <button class="btn btn-primary btn-block" id="farmHarvestBtn" style="margin-top:6px;" ${canHarvest?'':'disabled'}>🧺 수거하기</button>
     <div class="section-label" style="margin-top:12px;justify-content:space-between;">
-      <span>심어진 작물/나무 (${farm.plots.length}/${cap})</span>
+      <span>🌾 심어진 작물/나무 (${farm.plots.length}/${cap})</span>
       <div style="display:flex;gap:6px;">
-        <button class="btn btn-secondary" id="farmOpenPlantCropBtn" style="font-size:9.5px;padding:4px 8px;" ${farm.plots.length>=cap?'disabled':''}>씨앗 심기</button>
-        <button class="btn btn-secondary" id="farmOpenPlantTreeBtn" style="font-size:9.5px;padding:4px 8px;" ${farm.plots.length>=cap?'disabled':''}>나무 심기</button>
+        <button class="btn btn-secondary" id="farmOpenPlantCropBtn" style="font-size:9.5px;padding:4px 8px;" ${farm.plots.length>=cap?'disabled':''}>🌱 씨앗 심기</button>
+        <button class="btn btn-secondary" id="farmOpenPlantTreeBtn" style="font-size:9.5px;padding:4px 8px;" ${farm.plots.length>=cap?'disabled':''}>🪵 나무 심기</button>
       </div>
     </div>
     ${farmPlantPickerHtml()}

@@ -32,4 +32,11 @@ exports.handler = async (event, context) => {
       return { statusCode: 200, body: JSON.stringify({ ok: true, data: value, meta: metadata ? metadata.metadata : null }) };
     } else {
       // 슬롯 목록 조회
-      const { blobs } = await store.list({ prefix: `${user
+      const { blobs } = await store.list({ prefix: `${user.sub}/` });
+      const slots = blobs.map(b => ({ key: b.key.split('/').slice(1).join('/') }));
+      return { statusCode: 200, body: JSON.stringify({ ok: true, slots }) };
+    }
+  } catch (e) {
+    return { statusCode: 500, body: JSON.stringify({ error: '불러오기 중 오류가 발생했습니다.', detail: String(e) }) };
+  }
+};

@@ -34,4 +34,19 @@ exports.handler = async (event, context) => {
   // 있으면 수동으로 넘겨준다. Site configuration > Environment variables에
   // BLOBS_SITE_ID(사이트 ID)와 BLOBS_TOKEN(Personal Access Token)을 등록해두면 된다.
   const storeOpts = { name: 'eldria-saves', consistency: 'strong' };
-  if (process.env.BLOBS_SITE_ID && process
+  if (process.env.BLOBS_SITE_ID && process.env.BLOBS_TOKEN) {
+    storeOpts.siteID = process.env.BLOBS_SITE_ID;
+    storeOpts.token = process.env.BLOBS_TOKEN;
+  }
+  const store = getStore(storeOpts);
+  const key = `${user.sub}/${slotId}`;
+
+  try {
+    await store.set(key, data, {
+      metadata: { updatedAt: new Date().toISOString(), userEmail: user.email || '' }
+    });
+    return { statusCode: 200, body: JSON.stringify({ ok: true, updatedAt: new Date().toISOString() }) };
+  } catch (e) {
+    return { statusCode: 500, body: JSON.stringify({ error: '저장 중 오류가 발생했습니다.', detail: String(e) }) };
+  }
+};

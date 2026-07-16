@@ -2740,16 +2740,28 @@ async function cloudSave(slotId, data){
   if(!user || !slotId) return false;
   try{
     const token = await user.jwt();
+    // 서버(save.js)는 data가 반드시 "문자열"이어야 한다(typeof data !== 'string'이면 400 반환).
+    // 여기서 객체(state)를 그대로 보내면 항상 서버에서 거부되어 클라우드 저장이 조용히 실패하므로
+    // 반드시 JSON 문자열로 직렬화해서 보내야 한다.
     const res = await fetch('/.netlify/functions/save', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
-      body: JSON.stringify({ slotId, data })
+      body: JSON.stringify({ slotId, data: JSON.stringify(data) })
     });
-    return res.ok;
-  }catch(e){ return false; }
+    if(!res.ok){
+      let bodyText = '';
+      try{ bodyText = await res.text(); }catch(e2){}
+      console.error('[cloudSave] 실패', { slotId, status: res.status, body: bodyText });
+      return false;
+    }
+    return true;
+  }catch(e){
+    console.error('[cloudSave] 예외 발생', { slotId, error: e });
+    return false;
+  }
 }
 
-// 성공 시 { ok:true, data, meta } 형태를 반환하고, 없거나 실패하면 null을 반환한다.
+// 성공 시 { ok:true, data, meta } 형태를 반환하고(data는 파싱된 객체), 없거나 실패하면 null을 반환한다.
 async function cloudLoad(slotId){
   if(!window.netlifyIdentity) return null;
   const user = netlifyIdentity.currentUser();
@@ -2760,10 +2772,53 @@ async function cloudLoad(slotId){
       headers: { 'Authorization': 'Bearer ' + token }
     });
     if(res.status === 404) return null;
-    if(!res.ok) return null;
+    if(!res.ok){
+      let bodyText = '';
+      try{ bodyText = await res.text(); }catch(e2){}
+      console.error('[cloudLoad] 실패', { slotId, status: res.status, body: bodyText });
+      return null;
+    }
     const json = await res.json();
-    return (json && json.ok) ? json : null;
-  }catch(e){ return null; }
+    if(!json || !json.ok) return null;
+    // save.js에 저장된 data는 JSON 문자열이므로(cloudSave 참고) 여기서 다시 객체로 파싱해줘야 한다.
+    // 이전 버전에서는 이 파싱을 하지 않아 loadStateInto(문자열)이 잘못 호출되는 문제도 있었다.
+    let parsedData = json.data;
+    if(typeof parsedData === 'string'){
+      try{ parsedData = JSON.parse(parsedData); }
+      catch(e3){ console.error('[cloudLoad] 데이터 파싱 실패', { slotId, error: e3, raw: json.data }); return null; }
+    }
+    return { ok: true, data: parsedData, meta: json.meta };
+  }catch(e){
+    console.error('[cloudLoad] 예외 발생', { slotId, error: e });
+    return null;
+  }
+}
+
+// 슬롯 지정 없이 load 함수를 호출하면 로그인한 유저의 클라우드에 저장된 슬롯 목록을 반환한다
+// (load.js: slotId가 없으면 store.list()로 전체 슬롯 키 목록을 돌려줌).
+async function cloudListSlots(){
+  if(!window.netlifyIdentity) return null;
+  const user = netlifyIdentity.currentUser();
+  if(!user) return null;
+  try{
+    const token = await user.jwt();
+    const res = await fetch('/.netlify/functions/load', {
+      headers: { 'Authorization': 'Bearer ' + token }
+    });
+    if(!res.ok){
+      let bodyText = '';
+      try{ bodyText = await res.text(); }catch(e2){}
+      console.error('[cloudListSlots] 실패', { status: res.status, body: bodyText });
+      return null;
+    }
+    const json = await res.json();
+    if(!json || !json.ok || !Array.isArray(json.slots)) return null;
+    // load.js는 { key: 'char1' } 형태로 반환하므로 slotId 필드로도 접근할 수 있게 매핑해준다.
+    return json.slots.map(s=> ({ slotId: s.key, key: s.key }));
+  }catch(e){
+    console.error('[cloudListSlots] 예외 발생', { error: e });
+    return null;
+  }
 }
 
 // 로컬 자동저장 시점에 함께 호출되어, 로그인 상태이고 마지막 클라우드 저장으로부터
@@ -2799,6 +2854,16 @@ function promptCloudRestore(cloudPayload){
 }
 
 async function handleCloudLoginSync(){
+  // 캐릭터 선택(슬롯) 모달이 열려 있는 상태에서 로그인한 경우(신규 기기에서 로그인 버튼을
+  // 캐릭터를 고르기 전에 먼저 누르는 흔한 흐름 포함) currentSlotId가 아직 null이라 아래
+  // currentSlotId 기반 체크만으로는 아무 것도 확인하지 못한 채 조용히 끝나버린다.
+  // 이 경우 슬롯 선택 모달을 클라우드 슬롯 목록을 반영해 다시 그려준다.
+  const slotModal = document.getElementById('slotModal');
+  if(slotModal){
+    const canClose = slotModal.dataset.canClose === '1';
+    slotModal.remove();
+    await showSlotSelect(canClose);
+  }
   if(!currentSlotId) return;
   const cloudPayload = await cloudLoad(currentSlotId);
   if(cloudPayload && cloudPayload.data){
@@ -2810,6 +2875,11 @@ if(typeof window !== 'undefined' && window.netlifyIdentity){
   netlifyIdentity.on('init', user=>{
     cloudUser = user || null;
     renderAuthUI();
+    // netlify-identity-widget은 브라우저 세션이 이미 로그인되어 있던 경우(같은 기기에서
+    // 재방문) 'login' 이벤트가 아니라 'init' 이벤트로 currentUser를 넘겨준다.
+    // 기존 코드는 'login' 시점에만 handleCloudLoginSync를 호출했기 때문에, 이미 로그인된
+    // 상태로 페이지를 새로고침한 경우에는 클라우드 동기화 체크가 아예 실행되지 않았다.
+    if(cloudUser) handleCloudLoginSync();
   });
   netlifyIdentity.on('login', user=>{
     cloudUser = user;
@@ -11040,6 +11110,7 @@ async function showSlotSelect(canClose){
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay';
   overlay.id = 'slotModal';
+  overlay.dataset.canClose = canClose ? '1' : '0';
   overlay.innerHTML = `
     <div class="modal-box">
       <div class="detail-head" style="margin-bottom:0;">
@@ -11059,10 +11130,21 @@ async function showSlotSelect(canClose){
   const slotIds = Array.from({length: SLOT_COUNT}, (_,i)=> 'char'+(i+1));
   const dataList = await Promise.all(slotIds.map(loadSlot));
 
+  // 로그인한 상태라면 클라우드에 저장된 슬롯 목록도 함께 조회해, 로컬에는 없지만
+  // 클라우드에는 있는 캐릭터(다른 기기에서 만든 캐릭터)를 이 화면에서 바로 불러올 수 있게 한다.
+  let cloudSlotSet = new Set();
+  if(window.netlifyIdentity && cloudUser){
+    try{
+      const list = await cloudListSlots();
+      if(list) list.forEach(s=> cloudSlotSet.add(s.slotId));
+    }catch(e){ console.error('[showSlotSelect] 클라우드 슬롯 목록 조회 실패', e); }
+  }
+
   const wrap = overlay.querySelector('#slotListWrap');
   wrap.innerHTML = slotIds.map((id,i)=>{
     const data = dataList[i];
-    const title = data ? (data.name || '이름 없는 모험가') : `빈 슬롯 ${i+1}`;
+    const hasCloud = !data && cloudSlotSet.has(id);
+    const title = data ? (data.name || '이름 없는 모험가') : (hasCloud ? `빈 슬롯 ${i+1} (☁ 클라우드에 캐릭터 있음)` : `빈 슬롯 ${i+1}`);
     return `
     <div class="slot-card">
       <div class="slot-info">
@@ -11071,11 +11153,37 @@ async function showSlotSelect(canClose){
       </div>
       <div class="slot-actions">
         <button class="btn btn-primary" data-load="${id}">${data?'이어하기':'새로 시작'}</button>
-        ${data ? `<button class="btn btn-secondary" data-backup="${id}">백업</button>` : `<button class="btn btn-secondary" data-import-empty="${id}">가져오기</button>`}
+        ${data ? `<button class="btn btn-secondary" data-backup="${id}">백업</button>` : ''}
+        ${hasCloud ? `<button class="btn btn-secondary" data-cloud-restore="${id}">☁ 클라우드에서 불러오기</button>` : ''}
+        ${data ? '' : `<button class="btn btn-secondary" data-import-empty="${id}">가져오기</button>`}
         ${data ? `<button class="btn btn-danger" data-del="${id}">삭제</button>` : ''}
       </div>
     </div>`;
   }).join('');
+
+  wrap.querySelectorAll('button[data-cloud-restore]').forEach(btn=>{
+    btn.addEventListener('click', async (e)=>{
+      e.stopPropagation();
+      const id = btn.dataset.cloudRestore;
+      btn.disabled = true;
+      btn.textContent = '불러오는 중...';
+      const payload = await cloudLoad(id);
+      if(!payload || !payload.data){
+        btn.disabled = false;
+        btn.textContent = '☁ 클라우드에서 불러오기';
+        showToast('클라우드에서 불러오기에 실패했습니다', true);
+        return;
+      }
+      currentSlotId = id;
+      loadStateInto(payload.data);
+      if(hasStorage) await saveSlot(id, state);
+      invalidateOtherSlotCardCache();
+      overlay.remove();
+      switchTab('char');
+      renderAll();
+      showToast('클라우드에서 캐릭터를 불러왔습니다');
+    });
+  });
 
   wrap.querySelectorAll('button[data-import-empty]').forEach(btn=>{
     btn.addEventListener('click', (e)=>{
@@ -11734,3 +11842,4 @@ initGame();
 </script>
 </body>
 </html>
+<!-- synctest -->

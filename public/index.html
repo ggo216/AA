@@ -2871,8 +2871,12 @@ async function handleCloudLoginSync(){
   }
 }
 
+if(typeof window !== 'undefined' && !window.netlifyIdentity){
+  console.error('[identity] netlifyIdentity 위젯 스크립트가 로드되지 않았습니다 (네트워크 차단/광고차단 확장 프로그램 등을 확인하세요).');
+}
 if(typeof window !== 'undefined' && window.netlifyIdentity){
   netlifyIdentity.on('init', user=>{
+    console.log('[identity] init 이벤트 발생, user =', user);
     cloudUser = user || null;
     renderAuthUI();
     // netlify-identity-widget은 브라우저 세션이 이미 로그인되어 있던 경우(같은 기기에서
@@ -2883,7 +2887,9 @@ if(typeof window !== 'undefined' && window.netlifyIdentity){
     // 로그인되어 있지 않다면, 다른 화면(캐릭터 선택 등)보다 로그인 창이 먼저 눈에 띄도록
     // 페이지 로드 시점에 로그인 위젯을 자동으로 열어준다. 유저는 닫기(X) 버튼으로
     // 언제든 건너뛰고 로컬로만 플레이할 수 있다.
-    else netlifyIdentity.open('login');
+    // (주의: init 이벤트 발생 직후 바로 open()을 호출하면 위젯의 내부 iframe이 아직
+    // DOM에 완전히 준비되지 않아 조용히 무시되는 경우가 있어, 짧은 지연을 둔다.)
+    else setTimeout(()=>{ try{ console.log('[identity] 미로그인 상태 - 로그인 창 자동 오픈'); netlifyIdentity.open('login'); }catch(e){ console.error('[identity] open 실패', e); } }, 400);
   });
   netlifyIdentity.on('login', user=>{
     cloudUser = user;

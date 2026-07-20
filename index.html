@@ -3227,9 +3227,9 @@ const FARM_CROP_DEFS = {
                     perSecondAmt:(rk)=> Math.round(2 * (RARITY_MULT[rk]||1)), bonusPct:(rk)=> 1 * (RARITY_MULT[rk]||1) },
   // expLeaf는 rewardType==='exp'이므로 perSecondAmt가 절대치가 아니라 "현재 레벨 경험치 요구량 대비 초당 비율"을 반환한다.
   // tickFarmProduction()에서 expNeeded(state.level) * perSecondAmt(rarityKey)로 실제 생산량을 계산한다.
-  // [밸런스 너프] 작물/나무/동물의 초당 경험치 생산량이 과했다는 피드백에 따라 대폭 하향(약 1/3 수준).
+  // [밸런스 너프] 작물/나무/동물의 초당 경험치 생산량을 원래 값 대비 40% 하향.
   expLeaf:        { name:'지혜의 잎',  kind:'reward', rewardType:'exp',  seedType:'sageLeafSeed',
-                    perSecondAmt:(rk)=> 0.0002 * (RARITY_MULT[rk]||1), bonusPct:(rk)=> 1 * (RARITY_MULT[rk]||1) },
+                    perSecondAmt:(rk)=> 0.00036 * (RARITY_MULT[rk]||1), bonusPct:(rk)=> 1 * (RARITY_MULT[rk]||1) },
   gemFlower:      { name:'보석꽃',     kind:'reward', rewardType:'gem',  seedType:'gemFlowerSeed',
                     perSecondAmt:(rk)=> Math.max(1, Math.round(0.2 * (RARITY_MULT[rk]||1))), bonusPct:(rk)=> 1.2 * (RARITY_MULT[rk]||1) },
   strengthRoot:   { name:'힘의 뿌리',  kind:'combat', statKey:'str', seedType:'strengthRootSeed',
@@ -3244,7 +3244,7 @@ const FARM_TREE_DEFS = {
                     perSecondAmt:(rk)=> Math.round(3 * (RARITY_MULT[rk]||1)), bonusPct:(rk)=> 1.5 * (RARITY_MULT[rk]||1) },
   // wisdomTree도 expLeaf와 동일하게 "현재 레벨 경험치 요구량 대비 초당 비율"을 반환한다 (절대치 아님).
   wisdomTree:     { name:'지혜의 나무', kind:'reward', rewardType:'exp',  woodType:'pine',
-                    perSecondAmt:(rk)=> 0.00029 * (RARITY_MULT[rk]||1), bonusPct:(rk)=> 1.5 * (RARITY_MULT[rk]||1) },
+                    perSecondAmt:(rk)=> 0.000528 * (RARITY_MULT[rk]||1), bonusPct:(rk)=> 1.5 * (RARITY_MULT[rk]||1) },
   gemstoneTree:   { name:'보석나무',   kind:'reward', rewardType:'gem',  woodType:'mahogany',
                     perSecondAmt:(rk)=> Math.max(1, Math.round(0.3 * (RARITY_MULT[rk]||1))), bonusPct:(rk)=> 1.8 * (RARITY_MULT[rk]||1) },
   ironbarkTree:   { name:'철목나무',   kind:'combat', statKey:'atk', woodType:'ironwood',
@@ -3260,7 +3260,7 @@ const FARM_TREE_DEFS = {
 const FARM_ANIMAL_DEFS = {
   chicken: { name:FARM_ICON_SVG.chicken+' 닭', label:'닭', rewardType:'gold', baseAmt:(rk)=> Math.round(2.5 * (RARITY_MULT[rk]||1)) },
   // pig도 rewardType==='exp'이므로 baseAmt는 "현재 레벨 경험치 요구량 대비 초당 비율"을 반환한다 (절대치 아님).
-  pig:     { name:FARM_ICON_SVG.pig+' 돼지', label:'돼지', rewardType:'exp', baseAmt:(rk)=> 0.00024 * (RARITY_MULT[rk]||1) },
+  pig:     { name:FARM_ICON_SVG.pig+' 돼지', label:'돼지', rewardType:'exp', baseAmt:(rk)=> 0.000432 * (RARITY_MULT[rk]||1) },
   cow:     { name:FARM_ICON_SVG.cow+' 소', label:'소', rewardType:'gem', baseAmt:(rk)=> Math.max(1, Math.round(0.25 * (RARITY_MULT[rk]||1))) }
 };
 const FARM_ANIMAL_KEYS = Object.keys(FARM_ANIMAL_DEFS);
@@ -9343,12 +9343,20 @@ function learnSkill(key){
 /* =============================================================
    LEVELING (capped at 300, progressively harder)
    ============================================================= */
+// [밸런스 조정] 220레벨 이후 구간은 필요 경험치 자체가 매우 가파르게 늘어나는 데 대한 보완으로,
+// 실제 획득하는 경험치량을 레벨이 높아질수록 소폭(최대 25%까지) 늘려준다.
+const EXP_GAIN_LATE_BUMP_START = 220;
+function expGainLateBumpMult(level){
+  if(level <= EXP_GAIN_LATE_BUMP_START) return 1;
+  return 1 + Math.min(0.25, (level - EXP_GAIN_LATE_BUMP_START) * 0.003);
+}
 function gainExp(amount, opts){
   // [신규] 농장 특수 보상으로 얻는 "경험치 3배" 버프가 활성 중이면 획득 경험치를 3배로 계산한다.
   // 단, opts.skipExpBoost===true인 호출(예: 농장 수확 경험치)은 이 3배 버프의 영향을 받지 않는다.
   // (농장 생산량 자체가 이미 레벨업 요구 경험치에 비례하도록 설계되어 있어, 버프까지 곱하면
   //  버프->레벨업 가속->농장생산량 재증가로 이어지는 스노우볼 루프가 생기기 때문)
   if(!(opts && opts.skipExpBoost === true) && state.expBoostUntil && Date.now() < state.expBoostUntil) amount = amount * 3;
+  amount = amount * expGainLateBumpMult(state.level);
   // 착용 중인 펫들도 함께 경험치를 얻어 성장한다 (레벨업 상한 도달 여부와 무관하게 항상 적용)
   if((state.equippedPets||[]).length){
     const petExpAmount = Math.round(amount * 0.4);
@@ -9381,7 +9389,7 @@ function applyDeathPenalty(){
    경험치 획득 스탯·정령(스킬/장비/정령의 힘)의 비활성 경험치 보너스에 비례해 시간당 적립량이 늘어난다.
    ============================================================= */
 const IDLE_EXP_MAX_HOURS = 12; // 최대 누적 시간 (그 이상 접속하지 않아도 더 쌓이지 않음)
-const IDLE_EXP_BASE_HOURLY_FRACTION = 0.017; // 다음 레벨업 필요 경험치 대비 시간당 기본 적립 비율 (소폭 너프: 0.02 -> 0.017)
+const IDLE_EXP_BASE_HOURLY_FRACTION = 0.016; // 다음 레벨업 필요 경험치 대비 시간당 기본 적립 비율 (20% 너프: 0.02 -> 0.016)
 // precomputed(computeTotals 결과)를 넘기면 무거운 전체 스탯 재계산을 건너뛴다 (1초마다 호출되는 경로에서 중요)
 function idleExpHourlyRate(precomputed){
   if(state.level >= MAX_LEVEL) return 0;

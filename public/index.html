@@ -3229,11 +3229,14 @@ const FARM_TREE_DEFS = {
 };
 
 // 사육장 동물 정의: 닭=골드, 돼지=경험치, 소=보석을 초당 생산. 등급별 baseAmt 배율 차등.
+// [버그 수정] name 필드는 HTML(innerHTML)로 그려지는 화면(사육장 카드 등)에서만 써야 하는 아이콘 SVG+텍스트 조합이다.
+// showToast처럼 textContent(순수 텍스트)로 표시되는 곳에 그대로 쓰면 SVG 마크업이 글자 그대로 노출되는 버그가 생긴다.
+// 그래서 아이콘 없는 순수 텍스트 이름(label)을 별도로 두고, 텍스트 전용 문맥에서는 반드시 label을 사용한다.
 const FARM_ANIMAL_DEFS = {
-  chicken: { name:FARM_ICON_SVG.chicken+' 닭', rewardType:'gold', baseAmt:(rk)=> Math.round(2.5 * (RARITY_MULT[rk]||1)) },
+  chicken: { name:FARM_ICON_SVG.chicken+' 닭', label:'닭', rewardType:'gold', baseAmt:(rk)=> Math.round(2.5 * (RARITY_MULT[rk]||1)) },
   // pig도 rewardType==='exp'이므로 baseAmt는 "현재 레벨 경험치 요구량 대비 초당 비율"을 반환한다 (절대치 아님).
-  pig:     { name:FARM_ICON_SVG.pig+' 돼지', rewardType:'exp', baseAmt:(rk)=> 0.00072 * (RARITY_MULT[rk]||1) },
-  cow:     { name:FARM_ICON_SVG.cow+' 소', rewardType:'gem', baseAmt:(rk)=> Math.max(1, Math.round(0.25 * (RARITY_MULT[rk]||1))) }
+  pig:     { name:FARM_ICON_SVG.pig+' 돼지', label:'돼지', rewardType:'exp', baseAmt:(rk)=> 0.00072 * (RARITY_MULT[rk]||1) },
+  cow:     { name:FARM_ICON_SVG.cow+' 소', label:'소', rewardType:'gem', baseAmt:(rk)=> Math.max(1, Math.round(0.25 * (RARITY_MULT[rk]||1))) }
 };
 const FARM_ANIMAL_KEYS = Object.keys(FARM_ANIMAL_DEFS);
 // 농장/사육장의 오프라인 생산 계산 시, 너무 오랜 기간 방치되었을 때 한 번에 비정상적으로 큰 값이 쌓이는 것을
@@ -3578,7 +3581,7 @@ function useAnimalScroll(itemId){
   state.inventory.splice(idx,1);
   const animal = rollAnimalScroll(scroll.rarityKey);
   const rarity = RARITY_BY_KEY[animal.rarityKey]||RARITIES[0];
-  const kindName = (FARM_ANIMAL_DEFS[animal.kind]||{}).name||animal.kind;
+  const kindName = (FARM_ANIMAL_DEFS[animal.kind]||{}).label||animal.kind;
   showToast(`동물 주문서 사용! ${rarity.label} 등급 ${kindName}을(를) 획득했습니다. 사육장 탭에서 배치해보세요.`);
   renderAll();
 }
@@ -4543,13 +4546,14 @@ function renderRanchSub(){
   scrolls.forEach(s=>{ scrollCountByRarity[s.rarityKey] = (scrollCountByRarity[s.rarityKey]||0)+1; });
   const scrollRarityKeys = RARITY_ORDER.filter(g=> scrollCountByRarity[g]>0);
   const scrollHtml = scrollRarityKeys.length
-    ? `<div class="farm-plot-grid">${scrollRarityKeys.map(g=>{
+    ? `<div style="display:flex;flex-wrap:wrap;gap:8px;">${scrollRarityKeys.map(g=>{
         const rarity = RARITY_BY_KEY[g] || RARITIES[0];
         const cnt = scrollCountByRarity[g];
-        return `<div class="stat-box" style="margin-bottom:8px;">
-          <div style="display:flex;align-items:center;gap:6px;">
-            <span class="rarity-tag ${rarity.cls}">${rarity.label}</span>
-            <span style="font-weight:700;font-size:12.5px;">${FARM_ICON_SVG.scroll} 동물 주문서 x${cnt}</span>
+        return `<div class="stat-box" style="flex:1 1 150px;min-width:150px;margin-bottom:0;position:relative;padding-right:34px;">
+          <span style="position:absolute;top:8px;right:8px;font-size:10.5px;font-weight:700;color:var(--accent);background:var(--bg-inset);border-radius:8px;padding:1px 6px;">${cnt}개</span>
+          <div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;">
+            <span class="rarity-tag ${rarity.cls}" style="white-space:nowrap;flex-shrink:0;">${rarity.label}</span>
+            <span style="font-weight:700;font-size:12px;white-space:nowrap;">${FARM_ICON_SVG.scroll} 동물 주문서</span>
           </div>
           <button class="btn btn-primary" style="margin-top:6px;font-size:10.5px;padding:4px 8px;" data-ranch-use-scroll="${g}">사용</button>
         </div>`;
@@ -4664,17 +4668,23 @@ function farmMaterialTypeRowHtml(label, typeObj){
   }).join(' · ');
   return `<div style="margin:2px 0;">${label}: ${parts}</div>`;
 }
+// [간소화] 종류별/등급별로 다 나열하면 너무 복잡하다는 피드백에 따라, 기본 화면에는 나무/씨앗 "총합"만 보여준다.
+// 세부 종류·등급별 보유량은 씨앗/나무를 심을 때(farmPlantPickerHtml)에서 확인할 수 있으므로 여기서는 생략한다.
 function farmMaterialSummaryHtml(){
   const mat = state.farm.materials;
-  const woodRows = FARM_WOOD_TYPES.map(k=> farmMaterialTypeRowHtml(FARM_WOOD_LABEL[k], mat.wood[k])).join('');
-  const seedRows = FARM_SEED_TYPES.map(k=> farmMaterialTypeRowHtml(FARM_SEED_LABEL[k], mat.seed[k])).join('');
+  const woodTotal = FARM_WOOD_TYPES.reduce((a,k)=> a + sumFarmMaterialTypePool(mat.wood[k]), 0);
+  const seedTotal = FARM_SEED_TYPES.reduce((a,k)=> a + sumFarmMaterialTypePool(mat.seed[k]), 0);
+  const gradeOptions = RARITY_ORDER.slice(0,4).map(g=> `<option value="${g}">${RARITY_BY_KEY[g].label} 이하</option>`).join(''); // mythic은 정리 대상에서 제외
   return `<div class="section-label"><span>${FARM_ICON_SVG.basket} 보유 재료</span></div>
-    <div style="font-size:10.5px;color:var(--text-dim);line-height:1.6;">
-      ${woodRows}
-      ${seedRows}
+    <div style="font-size:11px;color:var(--text-dim);line-height:1.8;">
+      ${FARM_ICON_SVG.wood} 나무: <b style="color:var(--text);">${woodTotal.toLocaleString()}</b>개 ·
+      ${FARM_ICON_SVG.seed} 씨앗: <b style="color:var(--text);">${seedTotal.toLocaleString()}</b>개 ·
       ${FARM_ICON_SVG.brick} 벽돌: ${(mat.brick||0).toLocaleString()} · ${FARM_ICON_SVG.water} 물: ${(mat.water||0).toLocaleString()}
     </div>
-    <button class="btn btn-secondary" id="farmBulkCleanupBtn" title="일반 등급 재료를 3개당 물 1개로 일괄 정리합니다" style="font-size:9.5px;padding:4px 8px;margin-top:6px;">🧹 일반 재료 정리 (→물)</button>`;
+    <div style="display:flex;align-items:center;gap:6px;margin-top:6px;flex-wrap:wrap;">
+      <select id="farmCleanupGradeSelect" style="font-size:9.5px;padding:3px 4px;">${gradeOptions}</select>
+      <button class="btn btn-secondary" id="farmBulkCleanupBtn" title="선택한 등급 이하의 씨앗/나무 재료를 3개당 물 1개로 일괄 정리합니다" style="font-size:9.5px;padding:4px 8px;">🧹 재료 정리 (→물)</button>
+    </div>`;
 }
 
 // [수정] 씨앗/나무 심기 피커: 1단계로 종류(씨앗/나무 종류)를 선택하고, 2단계로 해당 종류의 등급(rarity)을 선택해서 심는다.
@@ -5515,8 +5525,7 @@ function renderSymbolPanel(precomputed){
   const canEnhance = (state.gold||0) >= goldCost && shards >= shardCost;
   box.innerHTML = `
     <div style="font-size:11px;color:var(--text-dim);margin-bottom:8px;line-height:1.6;">
-      심볼을 강화하면 주스탯(<b style="color:var(--c-legendary);">${STAT_LABEL[role.main]}</b>)이 1강당 +${SYMBOL_STAT_PER_LEVEL}씩 영구히 오릅니다. 강화는 횟수 제한 없이 무한히 가능하며, 레벨이 오를수록 필요한 골드와 심볼 조각이 크게 늘어납니다.
-      심볼 조각은 던전 탐사 중 아주 낮은 확률로 드롭되거나, 레이드 4단계 이상 클리어 시 낮은 확률로 획득할 수 있습니다.
+      1강당 주스탯(<b style="color:var(--c-legendary);">${STAT_LABEL[role.main]}</b>) +${SYMBOL_STAT_PER_LEVEL}, 무한 강화 가능. 심볼 조각은 던전/레이드(4단계+)에서 낮은 확률로 드롭됩니다.
     </div>
     <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">
       <div>
@@ -9334,7 +9343,7 @@ function collectIdleExp(){
   if(levelsGained > 0){
     const gain = levelGrowthGain(prevLevel, state.level, state.job);
     const gainText = PRIMARY_STATS.filter(k=>gain[k]).map(k=>`${STAT_LABEL[k]}+${gain[k]}`).join(' ');
-    msg += ` 레벨 업 x${levelsGained} (Lv.${state.level})${gainText?` · ${gainText}`:''}`;
+    msg += ` 레벨 업 ${levelsGained}회 (Lv.${state.level})${gainText?` · ${gainText}`:''}`;
   }
   showToast(msg);
   scheduleSave();
@@ -11648,7 +11657,7 @@ function showMiningChestResultModal({ chestCount, keyCost, goldGain, expGain, fr
     `탐험 경험치 +${expGain.toLocaleString()}`,
     `열쇠조각 +${fragGain}`,
     shardCount>0 ? `탐험 스탯 조각 +${shardCount}` : '',
-    levelsGained>0 ? `탐험 레벨업 x${levelsGained}! (Lv.${state.mining.level})` : ''
+    levelsGained>0 ? `탐험 레벨업 ${levelsGained}회! (Lv.${state.mining.level})` : ''
   ].filter(Boolean).join(' · ');
   const titleText = (chestCount||1) > 1 ? `보물상자 ${chestCount}개 개봉 결과 (열쇠 ${keyCost}개 사용)` : '보물상자 개봉 결과';
   overlay.innerHTML = `
@@ -11733,12 +11742,15 @@ function sellMiningJewel(jewelId){
   const idx = m.jewels.findIndex(j=>j.id===jewelId);
   if(idx===-1) return;
   const jewel = m.jewels[idx];
-  // 보석 도감은 "보유" 기준이므로, 세트 완성이 깨지는 판매는 미리 경고한다
+  // [버그 수정] 세트 완성 보너스는 codexDiscovered(영구 등록) 기준이라 한 번 완성하면 이후 팔아도 보너스가 유지된다.
+  // 예전에는 "팔면 보너스가 사라진다"는 부정확한 경고를 띄웠는데, 아직 그 세트를 한 번도 완성한 적 없는
+  // 경우에만(=지금 팔면 처음이자 유일한 완성 기회를 놓치는 경우) 경고하도록 수정한다.
   const counts = {};
   m.jewels.forEach(j=>{ counts[j.setKey] = (counts[j.setKey]||0)+1; });
   const set = JEWEL_SETS.find(x=>x.key===jewel.setKey);
-  if(set && counts[jewel.setKey] === set.pieces){
-    if(!confirm(`이 보석을 팔면 "${set.name}" 세트 완성이 해제되어 도감 보너스가 사라집니다. 계속하시겠습니까?`)) return;
+  const alreadyDiscovered = !!(m.codexDiscovered && m.codexDiscovered[jewel.setKey]);
+  if(set && !alreadyDiscovered && counts[jewel.setKey] === set.pieces){
+    if(!confirm(`이 보석을 팔면 "${set.name}" 세트를 완성할 기회를 놓쳐 도감 보너스를 받을 수 없게 됩니다. 계속하시겠습니까?`)) return;
   }
   const price = miningSellPrice(jewel.rarityKey);
   state.gold += price;
@@ -11957,7 +11969,7 @@ function renderMiningExpeditionSub(){
     const cost = CHEST_KEY_COST[g];
     const openable = Math.min(chestCounts[g], Math.floor(m.keys / cost));
     return `<div class="shop-item" style="border-color:${r.color};">
-      <div class="shop-name"><span class="rarity-tag ${r.cls}">${r.label}</span> 보물상자 x${chestCounts[g]}</div>
+      <div class="shop-name"><span class="rarity-tag ${r.cls}">${r.label}</span> 보물상자 ${chestCounts[g]}개</div>
       <div class="shop-rate">1개당 열쇠 ${cost}개 · 지금 열 수 있음 ${openable}개</div>
       <div style="display:flex;gap:4px;margin-top:4px;">
         <button class="btn btn-primary" style="flex:1;" data-open-chest-grade="${g}" ${openable<1?'disabled':''}>1개 열기</button>
@@ -13613,10 +13625,13 @@ on('farmSubFarm', 'click', (e)=>{
     return;
   }
   if(btn.id === 'farmBulkCleanupBtn'){
-    showConfirmModal('일반 등급 씨앗/나무 재료를 모두 정리하여 물로 전환하시겠습니까? (재료 3개당 물 1개)', ()=>{
-      const res = bulkCleanupFarmMaterials('common');
+    const gradeSel = document.getElementById('farmCleanupGradeSelect');
+    const gradeKey = (gradeSel && gradeSel.value) || 'common';
+    const gradeLabel = (RARITY_BY_KEY[gradeKey]||{}).label || '일반';
+    showConfirmModal(`${gradeLabel} 등급 이하의 씨앗/나무 재료를 모두 정리하여 물로 전환하시겠습니까? (재료 3개당 물 1개)`, ()=>{
+      const res = bulkCleanupFarmMaterials(gradeKey);
       if(res.consumed>0) showToast(`재료 ${res.consumed}개 정리 완료! 물 +${res.water}`);
-      else showToast('정리할 일반 등급 재료가 없습니다', true);
+      else showToast(`정리할 ${gradeLabel} 등급 이하 재료가 없습니다`, true);
       renderFarmSub();
     });
     return;

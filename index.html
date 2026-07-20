@@ -2895,8 +2895,9 @@ async function storageDelete(key){
 function freshWarehouse(){
   return {
     gold: 0, gems: 0,
+    gemstones: 0, // [수정] "젬스톤"은 광산 보석이 아니라 5차 스킬 강화에 쓰는 재화(state.gemstones)를 의미했다.
     items: [],   // 장비 아이템 (인벤토리 장비와 동일한 구조)
-    jewels: [],  // 광산 젬스톤 (state.mining.jewels와 동일한 구조)
+    jewels: [],  // (미사용) 예전에 광산 보석용으로 만들었던 필드 - 하위호환을 위해 남겨둠
     farmMaterials: { wood: freshFarmMaterialsWood(), seed: freshFarmMaterialsSeed(), brick: 0, water: 0 }
   };
 }
@@ -3264,9 +3265,9 @@ const FARM_CROP_DEFS = {
                     perSecondAmt:(rk)=> Math.round(2 * (RARITY_MULT[rk]||1)), bonusPct:(rk)=> 1 * (RARITY_MULT[rk]||1) },
   // expLeaf는 rewardType==='exp'이므로 perSecondAmt가 절대치가 아니라 "현재 레벨 경험치 요구량 대비 초당 비율"을 반환한다.
   // tickFarmProduction()에서 expNeeded(state.level) * perSecondAmt(rarityKey)로 실제 생산량을 계산한다.
-  // [밸런스 너프] 작물/나무/동물의 초당 경험치 생산량을 원래 값 대비 40% 하향.
+  // [밸런스 너프] 작물/나무/동물의 초당 경험치 생산량을 소폭 추가 하향(10%).
   expLeaf:        { name:'지혜의 잎',  kind:'reward', rewardType:'exp',  seedType:'sageLeafSeed',
-                    perSecondAmt:(rk)=> 0.00036 * (RARITY_MULT[rk]||1), bonusPct:(rk)=> 1 * (RARITY_MULT[rk]||1) },
+                    perSecondAmt:(rk)=> 0.0001296 * (RARITY_MULT[rk]||1), bonusPct:(rk)=> 1 * (RARITY_MULT[rk]||1) },
   gemFlower:      { name:'보석꽃',     kind:'reward', rewardType:'gem',  seedType:'gemFlowerSeed',
                     perSecondAmt:(rk)=> Math.max(1, Math.round(0.2 * (RARITY_MULT[rk]||1))), bonusPct:(rk)=> 1.2 * (RARITY_MULT[rk]||1) },
   strengthRoot:   { name:'힘의 뿌리',  kind:'combat', statKey:'str', seedType:'strengthRootSeed',
@@ -3281,7 +3282,7 @@ const FARM_TREE_DEFS = {
                     perSecondAmt:(rk)=> Math.round(3 * (RARITY_MULT[rk]||1)), bonusPct:(rk)=> 1.5 * (RARITY_MULT[rk]||1) },
   // wisdomTree도 expLeaf와 동일하게 "현재 레벨 경험치 요구량 대비 초당 비율"을 반환한다 (절대치 아님).
   wisdomTree:     { name:'지혜의 나무', kind:'reward', rewardType:'exp',  woodType:'pine',
-                    perSecondAmt:(rk)=> 0.000528 * (RARITY_MULT[rk]||1), bonusPct:(rk)=> 1.5 * (RARITY_MULT[rk]||1) },
+                    perSecondAmt:(rk)=> 0.00019008 * (RARITY_MULT[rk]||1), bonusPct:(rk)=> 1.5 * (RARITY_MULT[rk]||1) },
   gemstoneTree:   { name:'보석나무',   kind:'reward', rewardType:'gem',  woodType:'mahogany',
                     perSecondAmt:(rk)=> Math.max(1, Math.round(0.3 * (RARITY_MULT[rk]||1))), bonusPct:(rk)=> 1.8 * (RARITY_MULT[rk]||1) },
   ironbarkTree:   { name:'철목나무',   kind:'combat', statKey:'atk', woodType:'ironwood',
@@ -3297,7 +3298,7 @@ const FARM_TREE_DEFS = {
 const FARM_ANIMAL_DEFS = {
   chicken: { name:FARM_ICON_SVG.chicken+' 닭', label:'닭', rewardType:'gold', baseAmt:(rk)=> Math.round(2.5 * (RARITY_MULT[rk]||1)) },
   // pig도 rewardType==='exp'이므로 baseAmt는 "현재 레벨 경험치 요구량 대비 초당 비율"을 반환한다 (절대치 아님).
-  pig:     { name:FARM_ICON_SVG.pig+' 돼지', label:'돼지', rewardType:'exp', baseAmt:(rk)=> 0.000432 * (RARITY_MULT[rk]||1) },
+  pig:     { name:FARM_ICON_SVG.pig+' 돼지', label:'돼지', rewardType:'exp', baseAmt:(rk)=> 0.00015552 * (RARITY_MULT[rk]||1) },
   cow:     { name:FARM_ICON_SVG.cow+' 소', label:'소', rewardType:'gem', baseAmt:(rk)=> Math.max(1, Math.round(0.25 * (RARITY_MULT[rk]||1))) }
 };
 const FARM_ANIMAL_KEYS = Object.keys(FARM_ANIMAL_DEFS);
@@ -3685,6 +3686,23 @@ function useTowerAllStatScroll(itemId){
   const equipped = Object.values(state.equipment).filter(Boolean);
   if(!equipped.length){ showToast('착용 중인 장비가 없습니다.', true); return; }
   const item = pick(equipped);
+  item.affixes = item.affixes || [];
+  const line = item.affixes.find(l=>l.type==='allStatPct');
+  if(line) line.value = Math.round((line.value + TOWER_SCROLL_ALLSTAT_PCT)*100)/100;
+  else item.affixes.push({ type:'allStatPct', value: TOWER_SCROLL_ALLSTAT_PCT });
+  state.inventory.splice(idx,1);
+  showToast(`시험의 탑 주문서 사용! [${escapeHtml(item.name)}]의 올스탯이 +${TOWER_SCROLL_ALLSTAT_PCT}% 추가로 상승했습니다.`);
+  renderAll();
+}
+// [버그 수정] 기존에는 장비의 "주문서 적용" 목록에 이 주문서가 아예 뜨지 않아, 장비를 먼저 고른 뒤
+// 특정 장비를 지정해서 쓸 방법이 없고 useTowerAllStatScroll()의 무작위 대상 지정으로만 쓸 수 있었다.
+// 장비 상세화면의 "주문서 적용" 목록에서 이 주문서를 골랐을 때, 무작위가 아니라 지금 보고 있는
+// 그 장비에 확정으로 적용되도록 하는 버전.
+function applyTowerScrollToSlot(itemId, slotKey){
+  const idx = state.inventory.findIndex(i=>i.id===itemId && i.kind==='towerScroll');
+  if(idx===-1) return;
+  const item = state.equipment[slotKey];
+  if(!item){ showToast('적용할 장비를 선택해주세요', true); return; }
   item.affixes = item.affixes || [];
   const line = item.affixes.find(l=>l.type==='allStatPct');
   if(line) line.value = Math.round((line.value + TOWER_SCROLL_ALLSTAT_PCT)*100)/100;
@@ -5944,7 +5962,14 @@ function openItemPickerForSlot(kind, slotKey){
   let candidates;
   if(kind === 'rune') candidates = state.inventory.filter(i=> i.kind==='rune');
   else if(kind === 'stone') candidates = state.inventory.filter(i=> i.kind==='effectstone');
-  else candidates = state.inventory.filter(i=> i.kind==='scroll' && (i.stat==='atk') === (item.type==='weapon'));
+  else {
+    // [버그 수정] 시험의 탑 주문서(kind:'towerScroll')는 무기/방어구 구분 없이 아무 장비에나 쓸 수 있는
+    // 별도 종류의 주문서인데, 기존에는 이 목록이 kind==='scroll'(기본 능력치 주문서)만 걸러내서
+    // 인벤토리에 분명히 있어도 이 "주문서 적용" 목록에는 전혀 나타나지 않았다.
+    const basicScrolls = state.inventory.filter(i=> i.kind==='scroll' && (i.stat==='atk') === (item.type==='weapon'));
+    const towerScrolls = state.inventory.filter(i=> i.kind==='towerScroll');
+    candidates = [...basicScrolls, ...towerScrolls];
+  }
   candidates = [...candidates].sort((a,b)=> RARITY_MULT[b.rarityKey]-RARITY_MULT[a.rarityKey]);
 
   const overlay = document.createElement('div');
@@ -5970,6 +5995,7 @@ function openItemPickerForSlot(kind, slotKey){
       const cpText = cpDelta>0?`전투력 +${cpDelta.toLocaleString()}`:cpDelta<0?`전투력 ${cpDelta.toLocaleString()}`:'전투력 변화 없음';
       cpBadge = `<span class="compare-cp-badge" style="color:${cpColor};font-size:10px;">${cpText}</span>`;
     }
+    else if(it.kind==='towerScroll'){ previewText = `올스탯 +${TOWER_SCROLL_ALLSTAT_PCT}% (100% 확정)`; }
     else { const tier = SCROLL_TIERS[it.tier]; previewText = `성공률 ${Math.round(tier.successRate*100)}% · ${STAT_LABEL[it.stat]} 상승`; }
     return `<button class="btn btn-secondary" data-pick-id="${it.id}" style="text-align:left;display:flex;flex-direction:column;gap:2px;padding:8px 10px;">
         <span><span class="rarity-tag ${rarity.cls}">${rarity.label}</span> ${escapeHtml(it.name)}</span>
@@ -5988,9 +6014,11 @@ function openItemPickerForSlot(kind, slotKey){
   overlay.querySelectorAll('button[data-pick-id]').forEach(btn=>{
     btn.addEventListener('click', ()=>{
       const id = btn.dataset.pickId;
+      const picked = candidates.find(c=>c.id===id);
       overlay.remove();
       if(kind==='rune') applyRuneToOpenItem(id, slotKey);
       else if(kind==='stone') applyEffectStoneToOpenItem(id, slotKey);
+      else if(picked && picked.kind==='towerScroll') applyTowerScrollToSlot(id, slotKey);
       else applyScrollToOpenItem(id, slotKey);
     });
   });
@@ -9468,7 +9496,7 @@ function applyDeathPenalty(){
    경험치 획득 스탯·정령(스킬/장비/정령의 힘)의 비활성 경험치 보너스에 비례해 시간당 적립량이 늘어난다.
    ============================================================= */
 const IDLE_EXP_MAX_HOURS = 12; // 최대 누적 시간 (그 이상 접속하지 않아도 더 쌓이지 않음)
-const IDLE_EXP_BASE_HOURLY_FRACTION = 0.016; // 다음 레벨업 필요 경험치 대비 시간당 기본 적립 비율 (20% 너프: 0.02 -> 0.016)
+const IDLE_EXP_BASE_HOURLY_FRACTION = 0.0128; // 다음 레벨업 필요 경험치 대비 시간당 기본 적립 비율 (추가 20% 너프: 0.016 -> 0.0128)
 // precomputed(computeTotals 결과)를 넘기면 무거운 전체 스탯 재계산을 건너뛴다 (1초마다 호출되는 경로에서 중요)
 function idleExpHourlyRate(precomputed){
   if(state.level >= MAX_LEVEL) return 0;
@@ -14011,6 +14039,20 @@ async function withdrawGems(amount){
   await saveWarehouse(); scheduleSave(); showWarehouseModal(); renderAll();
   showToast(`보석 ${amt.toLocaleString()}을(를) 창고에서 인출했습니다`);
 }
+async function depositGemstones(amount){
+  const amt = Math.floor(Math.max(0, amount));
+  if(amt<=0 || amt>(state.gemstones||0)){ showToast('보유한 젬스톤보다 많이 예치할 수 없습니다', true); return; }
+  state.gemstones -= amt; warehouse.gemstones = (warehouse.gemstones||0) + amt;
+  await saveWarehouse(); scheduleSave(); showWarehouseModal(); renderAll();
+  showToast(`젬스톤 ${amt.toLocaleString()}개를 창고에 예치했습니다`);
+}
+async function withdrawGemstones(amount){
+  const amt = Math.floor(Math.max(0, amount));
+  if(amt<=0 || amt>(warehouse.gemstones||0)){ showToast('창고에 보관된 젬스톤보다 많이 인출할 수 없습니다', true); return; }
+  warehouse.gemstones -= amt; state.gemstones = (state.gemstones||0) + amt;
+  await saveWarehouse(); scheduleSave(); showWarehouseModal(); renderAll();
+  showToast(`젬스톤 ${amt.toLocaleString()}개를 창고에서 인출했습니다`);
+}
 async function depositItemToWarehouse(itemId){
   const idx = state.inventory.findIndex(i=>i.id===itemId);
   if(idx===-1) return;
@@ -14149,19 +14191,16 @@ function showWarehouseModal(){
         </div>
       </div>`;
   } else if(warehouseSubTab==='jewel'){
-    const invJewels = state.mining.jewels||[];
+    // [수정] "젬스톤"은 광산 보석이 아니라 5차 스킬 강화(gemEnhanceSkill)에 쓰는 재화(state.gemstones)를 말한다.
     bodyHtml = `
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
-        <div>
-          <div class="detail-section-label" style="justify-content:flex-start;">내 보석함 (${invJewels.length})</div>
-          <div style="max-height:280px;overflow-y:auto;border:1px solid var(--border-soft);border-radius:8px;">${invJewels.length ? invJewels.map(j=>warehouseJewelRowHtml(j,'inv')).join('') : '<div style="padding:12px;font-size:11px;color:var(--text-dim);text-align:center;">없음</div>'}</div>
+      <div style="background:var(--bg-inset);border:1px solid var(--border-soft);border-radius:10px;padding:10px 12px;">
+        <div style="font-size:11px;color:var(--text-dim);margin-bottom:6px;">젬스톤(5차 스킬 강화 재료) · 보유 ${(state.gemstones||0).toLocaleString()}개 · 창고 ${(warehouse.gemstones||0).toLocaleString()}개</div>
+        <div style="display:flex;gap:6px;">
+          <input type="number" id="whGemstoneInput" placeholder="수량" style="flex:1;min-width:0;background:var(--bg-panel);border:1px solid var(--border-soft);border-radius:8px;padding:7px 8px;color:var(--text);font-size:12px;">
+          <button class="btn btn-primary" id="whGemstoneDepositBtn" style="flex-shrink:0;">예치</button>
+          <button class="btn btn-secondary" id="whGemstoneWithdrawBtn" style="flex-shrink:0;">인출</button>
         </div>
-        <div>
-          <div class="detail-section-label" style="justify-content:flex-start;">창고 보관함 (${warehouse.jewels.length})</div>
-          <div style="max-height:280px;overflow-y:auto;border:1px solid var(--border-soft);border-radius:8px;">${warehouse.jewels.length ? warehouse.jewels.map(j=>warehouseJewelRowHtml(j,'wh')).join('') : '<div style="padding:12px;font-size:11px;color:var(--text-dim);text-align:center;">없음</div>'}</div>
-        </div>
-      </div>
-      <div style="font-size:9.5px;color:var(--text-dim);margin-top:6px;">장착 중인 보석은 먼저 해제해야 창고에 넣을 수 있습니다.</div>`;
+      </div>`;
   } else if(warehouseSubTab==='farm'){
     const mySeed = sumFarmMaterialPool(state.farm.materials.seed);
     const myWood = sumFarmMaterialPool(state.farm.materials.wood);
@@ -14209,6 +14248,11 @@ function showWarehouseModal(){
   if(gemDepositBtn) gemDepositBtn.addEventListener('click', ()=> depositGems(Number(gemInput.value)||0));
   const gemWithdrawBtn = document.getElementById('whGemWithdrawBtn');
   if(gemWithdrawBtn) gemWithdrawBtn.addEventListener('click', ()=> withdrawGems(Number(gemInput.value)||0));
+  const gemstoneInput = document.getElementById('whGemstoneInput');
+  const gemstoneDepositBtn = document.getElementById('whGemstoneDepositBtn');
+  if(gemstoneDepositBtn) gemstoneDepositBtn.addEventListener('click', ()=> depositGemstones(Number(gemstoneInput.value)||0));
+  const gemstoneWithdrawBtn = document.getElementById('whGemstoneWithdrawBtn');
+  if(gemstoneWithdrawBtn) gemstoneWithdrawBtn.addEventListener('click', ()=> withdrawGemstones(Number(gemstoneInput.value)||0));
   overlay.querySelectorAll('button[data-wh-deposit-item]').forEach(btn=> btn.addEventListener('click', ()=> depositItemToWarehouse(btn.dataset.whDepositItem)));
   overlay.querySelectorAll('button[data-wh-withdraw-item]').forEach(btn=> btn.addEventListener('click', ()=> withdrawItemFromWarehouse(btn.dataset.whWithdrawItem)));
   overlay.querySelectorAll('button[data-wh-deposit-jewel]').forEach(btn=> btn.addEventListener('click', ()=> depositJewelToWarehouse(btn.dataset.whDepositJewel)));

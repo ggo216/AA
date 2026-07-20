@@ -498,7 +498,10 @@
   .pet-card-emoji{display:flex;justify-content:center;color:var(--gold);}
   .pet-card-emoji svg{width:26px;height:26px;}
   /* 파티원 선택 카드 (월드보스/레이드 추가 파티원) */
-  .party-pick-card{position:relative;display:block;background:var(--bg-panel-light);border:1px solid var(--border-soft);border-radius:9px;padding:8px 10px;min-width:118px;flex:1 1 118px;cursor:pointer;transition:border-color .15s,background .15s;font-family:'Gowun Dodum','Noto Sans KR',sans-serif;}
+  /* [버그 수정] flex:1 1 118px 상태에서 그리드가 홀수 개로 줄바꿈되면 마지막 줄에 혼자 남는 카드가
+     grow(1)로 인해 한 줄 전체 너비로 확 늘어나 보이는 문제가 있었다 (동물 주문서 카드와 동일한 버그
+     패턴). grow를 0으로 낮추고 최대 너비를 지정해 혼자 남아도 다른 카드와 같은 크기를 유지하게 한다. */
+  .party-pick-card{position:relative;display:block;background:var(--bg-panel-light);border:1px solid var(--border-soft);border-radius:9px;padding:8px 10px;min-width:118px;max-width:160px;flex:0 1 118px;cursor:pointer;transition:border-color .15s,background .15s;font-family:'Gowun Dodum','Noto Sans KR',sans-serif;}
   .party-pick-card:hover{border-color:var(--accent);}
   .party-pick-card.selected{border-color:var(--gold);background:rgba(169,195,220,.12);box-shadow:0 0 0 1px var(--gold) inset;}
   .party-pick-card.empty{opacity:0.45;cursor:not-allowed;}
@@ -8719,12 +8722,12 @@ function runTowerFloor(){
   const comboState = { streak: 0 };
   // [버그 수정] 로그 재생 간격이 고정 90ms라서, 로그 항목이 많은 전투는 실제 제한시간(5초)이 이미 지나
   // 승패가 결정된 뒤에도 화면상 애니메이션만 한참 더 재생되어 "5초가 지나도 안 끝나는 것처럼" 보였다.
-  // 로그 개수에 맞춰 간격을 동적으로 조절해서, 전체 재생 시간이 제한시간(5초)에 가깝게 맞춰지도록 한다.
-  // [추가 수정] 위쪽 상한을 90ms로 고정해뒀더니, 반대로 전투가 한두 턴 만에 끝나는 경우(로그가 매우 적음)
-  // 재생이 200ms도 안 돼서 순식간에 끝나버려 남은시간 표시가 "5.0초"에서 거의 움직이지 않은 채 화면이
-  // 바로 바뀌어버리는 문제가 있었다. 상한을 제한시간 전체로 늘려, 로그가 적을 때는 오히려 한 턴당 간격을
-  // 늘려서 실제 제한시간만큼 재생 시간을 채우도록 한다.
-  const stepDelay = clamp(Math.floor((TOWER_TIME_LIMIT_SEC*1000) / Math.max(1, result.log.length)), 20, TOWER_TIME_LIMIT_SEC*1000);
+  // 로그 개수에 맞춰 간격을 동적으로 줄여서, 전체 재생 시간이 제한시간을 크게 넘지 않도록 한다.
+  // [되돌림] 한때 상한을 제한시간 전체(5000ms)까지 늘려봤는데, 그러면 전투가 한두 턴 만에(순식간에)
+  // 끝나는 경우(예: 펫 선제공격 한 방에 즉사) 오히려 실제로는 끝난 전투를 억지로 5초 내내 붙잡아두면서
+  // "잡고 나서 한참 뒤에야 다음 층으로 넘어가고, 그동안 남은시간 표시는 그대로 멈춰있는" 것처럼 보이는
+  // 더 나쁜 문제가 생겼다. 전투가 빨리 끝나면 화면도 빨리 넘어가는 게 맞으므로 상한을 다시 90ms로 되돌린다.
+  const stepDelay = clamp(Math.floor((TOWER_TIME_LIMIT_SEC*1000) / Math.max(1, result.log.length)), 20, 90);
   function step(){
     if(!towerRun){ return; }
     if(i >= result.log.length){ finishTowerFloor(result, enemy, timedOut); return; }
@@ -9055,11 +9058,11 @@ function runTowerHardFloor(){
   let i = 0;
   let prevEnHp = enemy.hp, prevMyHp = towerHardRun.hp;
   const comboState = { streak: 0 };
-  // [버그 수정] 일반 모드와 동일하게, 로그 개수에 맞춰 재생 간격을 동적으로 조절해 전체 재생 시간이
-  // 제한시간(5초)에 가깝게 맞춰지도록 한다. 상한을 90ms로 고정해뒀더니 로그가 적은(한두 턴 만에
-  // 끝나는) 전투에서는 순식간에 재생이 끝나버려 남은시간 표시가 거의 움직이지 않던 문제가 있어,
-  // 상한을 제한시간 전체로 늘렸다.
-  const stepDelay = clamp(Math.floor((TOWER_TIME_LIMIT_SEC*1000) / Math.max(1, result.log.length)), 20, TOWER_TIME_LIMIT_SEC*1000);
+  // [버그 수정] 일반 모드와 동일하게, 로그 개수에 맞춰 재생 간격을 동적으로 줄여 전체 재생 시간이
+  // 제한시간을 크게 넘지 않도록 한다.
+  // [되돌림] 상한을 제한시간 전체(5000ms)로 늘렸더니, 펫 선제공격 한 방에 즉사시키는 등 한두 턴 만에
+  // 끝나는 전투에서 오히려 이미 끝난 전투를 억지로 5초 내내 붙잡아두는 문제가 생겨 90ms로 되돌린다.
+  const stepDelay = clamp(Math.floor((TOWER_TIME_LIMIT_SEC*1000) / Math.max(1, result.log.length)), 20, 90);
   function step(){
     if(!towerHardRun){ return; }
     if(i >= result.log.length){ finishTowerHardFloor(result, enemy, timedOut); return; }
@@ -9452,7 +9455,13 @@ function collectIdleExp(){
 // 추가로 사용해 훨씬 다채롭고 위협적으로 싸운다.
 const RAID_BOSS_PERCENT_DMG_PCT = 0.15; // 체력 비례 공격: 플레이어 최대 체력의 15%를 고정 피해로
 const RAID_EXECUTE_HP_THRESHOLD = 0.25; // 즉사기: 플레이어 체력이 25% 미만이면 즉사, 아니면 대신 극딜
-function simulateBattle(playerStats, skills, enemy, job, startHp, startMana, potionsRef, potionChoice, cooldownStateRef, priorityOrder, timeLimitSec){
+// [버그 수정] "레이드 보스가 공격을 안 하는 것 같다"는 피드백 확인 결과, 레이드 보스의 일반 공격/강타/극딜기
+// 데미지 공식이 전부 (공격력 - 방어력) 형태라서, 여러 시스템으로 방어력이 크게 누적된 캐릭터를 상대로는
+// 결과값이 최소치(1)로 깎여 사실상 공격이 무의미해지는 경우가 있었다. 방어력이 아무리 높아도 최소한
+// 플레이어 최대 체력의 일정 %는 항상 피해를 입도록 하한선을 둔다.
+const RAID_MIN_HIT_DMG_PCT = 0.025; // 레이드 보스의 일반 공격/강타/극딜 최소 피해량 (플레이어 최대 체력의 2.5%)
+function raidMinHitFloor(playerStats){ return Math.max(1, Math.round(playerStats.hp * RAID_MIN_HIT_DMG_PCT)); }
+function simulateBattle(playerStats, skills, enemy, job, startHp, startMana, potionsRef, potionChoice, cooldownStateRef, priorityOrder, timeLimitSec, raidTimeCarry){
   let myHp = clamp(startHp, 0, playerStats.hp);
   let mana = clamp(startMana, 0, playerStats.maxMana);
   let enHp = enemy.hp;
@@ -9466,7 +9475,14 @@ function simulateBattle(playerStats, skills, enemy, job, startHp, startMana, pot
   // 20초마다 최대 체력의 50%, 60초(1분)마다 최대 체력의 90%를 방어력/피해감소 등 모든 경감 효과를 무시하고 고정 피해로 가한다.
   const RAID_PERCENT50_INTERVAL_SEC = 20, RAID_PERCENT50_PCT = 0.5;
   const RAID_PERCENT90_INTERVAL_SEC = 60, RAID_PERCENT90_PCT = 0.9;
-  let nextRaidPercent50At = RAID_PERCENT50_INTERVAL_SEC, nextRaidPercent90At = RAID_PERCENT90_INTERVAL_SEC;
+  // [버그 수정] 레이드 전투가 한 번의 simulateBattle 호출로 끝까지 계산되지 않고 여러 번의 "청크"로
+  // 나뉘어 이어질 경우(runRaidChunk가 반복 호출), 이 값들이 매 청크마다 20/60으로 초기화되어 버려서
+  // 누적 전투 시간이 실제로는 20초/60초를 이미 넘었는데도 고정 피해 공격이 "이번 청크 기준으로는 아직"이라며
+  // 영영 발동하지 않는 심각한 버그가 있었다. 호출한 쪽에서 이전 청크의 값을 raidTimeCarry로 넘겨주면
+  // 이어서 사용하고, 없으면(전투 시작) 기본값으로 초기화한다.
+  let nextRaidPercent50At = (raidTimeCarry && typeof raidTimeCarry.next50==='number') ? raidTimeCarry.next50 : RAID_PERCENT50_INTERVAL_SEC;
+  let nextRaidPercent90At = (raidTimeCarry && typeof raidTimeCarry.next90==='number') ? raidTimeCarry.next90 : RAID_PERCENT90_INTERVAL_SEC;
+  const raidTimeStartOffset = (raidTimeCarry && typeof raidTimeCarry.elapsed==='number') ? raidTimeCarry.elapsed : 0;
   const ironReduce = skills.ironSkin>0 ? SKILL_DEFS.ironSkin.reduce(skills.ironSkin) : 0;
   const skillMult = playerStats.skillMult;
   const critChance = playerStats.crit, critMult = playerStats.critDmgMult;
@@ -9495,7 +9511,7 @@ function simulateBattle(playerStats, skills, enemy, job, startHp, startMana, pot
   function skillCooldown(jdef){ return Math.max(1, Math.round((jdef.cooldown||1)*cooldownReductionMult)); }
   const log = [];
   let outcome = 'draw';
-  let elapsedAtOutcome = 0; // 시험의 탑 등 제한시간 콘텐츠에서 사용할, 결과가 결정된 시점의 시뮬레이션 경과 시간(초)
+  let elapsedAtOutcome = raidTimeStartOffset; // 시험의 탑 등 제한시간 콘텐츠에서 사용할, 결과가 결정된 시점의 시뮬레이션 경과 시간(초). 레이드가 여러 청크로 이어지는 경우 이전 청크의 누적 시간부터 이어서 시작한다.
 
   function pushLog(cls, text){
     const myBuffKeys = Object.keys(buffTurnsLeft).filter(k=> buffTurnsLeft[k]>0);
@@ -9514,7 +9530,7 @@ function simulateBattle(playerStats, skills, enemy, job, startHp, startMana, pot
   const enemySpeed = clamp((ENEMY_BASE_ATK_SPEED + Math.log(1+Math.max(0,enemy.level))*ENEMY_ATK_SPEED_LOG_MULT) * (enemy.atkSpeedMult||1), 0.5, 6);
   const pInterval = 1 / Math.max(0.3, playerStats.spd); // [수정] 공격속도 상한 제거
   const eInterval = 1 / enemySpeed;
-  let pNext = pInterval, eNext = eInterval;
+  let pNext = raidTimeStartOffset + pInterval, eNext = raidTimeStartOffset + eInterval;
   let iter = 0;
 
   let jobSkillKeys = (job && JOB_SKILLS[job]) ? JOB_SKILLS[job].filter(k=> SKILL_DEFS[k].kind==='active') : [];
@@ -9818,6 +9834,7 @@ function simulateBattle(playerStats, skills, enemy, job, startHp, startMana, pot
           if(choice === 'power'){
             let bonusDmg = Math.max(1, Math.round(curAtk*1.6 - playerStats.def*playerDebuffDefMult*0.5));
             if(ironReduce>0) bonusDmg = Math.max(1, Math.round(bonusDmg*(1-ironReduce)));
+            if(enemy.isRaid) bonusDmg = Math.max(bonusDmg, raidMinHitFloor(playerStats));
             myHp -= bonusDmg;
             pushLog('en', `${enemy.name}의 강타! ${bonusDmg}의 강력한 피해를 받았습니다. (내 HP ${Math.max(0,myHp)}/${playerStats.hp})`);
             bossSkillUsed = true;
@@ -9849,6 +9866,7 @@ function simulateBattle(playerStats, skills, enemy, job, startHp, startMana, pot
             } else {
               let execDmg = Math.max(1, Math.round(curAtk*3.2 - playerStats.def*playerDebuffDefMult*0.3));
               if(ironReduce>0) execDmg = Math.max(1, Math.round(execDmg*(1-ironReduce)));
+              if(enemy.isRaid) execDmg = Math.max(execDmg, raidMinHitFloor(playerStats)*2);
               myHp -= execDmg;
               pushLog('en', `${enemy.name}의 극딜기! ${execDmg}의 엄청난 피해를 받았습니다. (내 HP ${Math.max(0,myHp)}/${playerStats.hp})`);
               bossSkillUsed = true;
@@ -9864,6 +9882,7 @@ function simulateBattle(playerStats, skills, enemy, job, startHp, startMana, pot
           const curAtk = Math.round(enemy.atk * (bossSelfBuffTurns>0 ? (1+bossSelfBuffAtkBonus) : 1));
           let dmgToMe = Math.max(1, curAtk - playerStats.def*playerDebuffDefMult + randInt(-2,2));
           if(ironReduce>0) dmgToMe = Math.max(1, Math.round(dmgToMe*(1-ironReduce)));
+          if(enemy.isRaid) dmgToMe = Math.max(dmgToMe, raidMinHitFloor(playerStats));
           myHp -= dmgToMe;
           pushLog('en', `${enemy.name}의 공격! ${dmgToMe} 피해를 받았습니다.${ironReduce>0?' (철갑 적용)':''} (내 HP ${Math.max(0,myHp)}/${playerStats.hp})`);
           if(myHp <= 0 && !tryDeathSave()){ outcome='lose'; break; }
@@ -9897,7 +9916,8 @@ function simulateBattle(playerStats, skills, enemy, job, startHp, startMana, pot
     cooldownStateRef.buffContribution = buffContribution;
     cooldownStateRef.atkBuff = atkBuff; // 버프/쿨타임이 몬스터를 넘어 스테이지 전체에서 이어짐
   }
-  return { log, outcome, endHp: Math.max(0,myHp), endMana: Math.max(0,mana), aoeTriggered, lastAoeDamage, elapsedSec: elapsedAtOutcome };
+  return { log, outcome, endHp: Math.max(0,myHp), endMana: Math.max(0,mana), aoeTriggered, lastAoeDamage, elapsedSec: elapsedAtOutcome,
+    raidTimeCarry: { elapsed: elapsedAtOutcome, next50: nextRaidPercent50At, next90: nextRaidPercent90At } };
 }
 
 /* =============================================================
@@ -10561,12 +10581,15 @@ function generateRaidEnemy(stageDef){
   // [3차 상향] 체력 30배수 -> 36배수, 공격력 1.3배수 -> 1.5배수, 방어력 1.25배수 -> 1.4배수로 추가 상향
   // [4차 상향] 체력은 살짝 더(36 -> 40), 공격력은 한 단계 더(1.5 -> 1.8) 상향
   const hp = Math.round(base * stageDef.hpMult * 40);
-  const atk = Math.round((14+state.level*2.2) * stageDef.atkMult * 1.8);
-  const def = Math.round((10+state.level*1.4) * stageDef.defMult * 1.4);
-  const magicDef = Math.round(def * 1.4); // [3차 상향] 마법방어력 배율도 1.25 -> 1.4로 상향
-  // [3차 상향] 보스 공격속도도 단계가 오를수록 함께 빨라지도록 atkSpeedMult 필드를 추가한다 (simulateBattle에서 참조).
-  // [4차 상향] 공격속도 기본값 자체를 25% 추가 상향 (1.0 -> 1.25 기준점)
-  const atkSpeedMult = 1.25 + (stageDef.stage-1)*0.12;
+  // [5차 상향] "레이드 보스가 공격을 안 하는 것 같다"는 피드백 확인 결과, 공격력 자체는 정상 작동하지만
+  // 그동안 여러 시스템(훈장/심볼/농장 등)으로 플레이어 방어력이 누적 상승해 공격력-방어력 차이가 거의 0에
+  // 수렴, 매 타격이 최소치(1)로 깎여 체감상 "공격을 안 하는 것"처럼 보였다. 공격력/방어력/마법방어력/
+  // 공격속도를 한 번 더 큰 폭으로 상향한다 (공격력 1.8배 -> 2.6배, 방어력 1.4배 -> 1.8배).
+  const atk = Math.round((14+state.level*2.2) * stageDef.atkMult * 2.6);
+  const def = Math.round((10+state.level*1.4) * stageDef.defMult * 1.8);
+  const magicDef = Math.round(def * 1.6); // 마법방어력 배율도 1.4 -> 1.6로 상향
+  // [5차 상향] 공격속도 기준점도 1.25 -> 1.6으로 상향, 단계당 증가폭도 0.12 -> 0.16으로 상향
+  const atkSpeedMult = 1.6 + (stageDef.stage-1)*0.16;
   // [전체 난이도 상향] 레이드 최종 스탯에 RAID_DIFFICULTY_BUMP를 추가로 곱한다.
   return { name:`[레이드] ${stageDef.name}`, level: state.level+stageDef.stage*8,
     atk: Math.round(atk*RAID_DIFFICULTY_BUMP), def: Math.round(def*RAID_DIFFICULTY_BUMP), magicDef: Math.round(magicDef*RAID_DIFFICULTY_BUMP),
@@ -10674,11 +10697,15 @@ function runRaidChunk(){
   RAID_CONTEXT_ACTIVE = true;
   let result;
   try{
-    result = simulateBattle(raidRun.playerStats, state.skills, raidRun.enemy, state.job, raidRun.hp, raidRun.mana, state.potions, { hpKey: state.autoPotionHp, manaKey: state.autoPotionMana }, raidRun.cooldownState, currentSkillPriorityOrder('boss'), EXPED_CONFIG.RAID_TIME_LIMIT_SEC);
+    result = simulateBattle(raidRun.playerStats, state.skills, raidRun.enemy, state.job, raidRun.hp, raidRun.mana, state.potions, { hpKey: state.autoPotionHp, manaKey: state.autoPotionMana }, raidRun.cooldownState, currentSkillPriorityOrder('boss'), EXPED_CONFIG.RAID_TIME_LIMIT_SEC, raidRun.timeCarry);
   } finally {
     RAID_CONTEXT_ACTIVE = false;
   }
   raidRun.hp = result.endHp; raidRun.mana = result.endMana;
+  // [버그 수정] 레이드 전투가 여러 청크로 나뉘어 이어질 때, 20초/60초 고정 피해 타이머가 매 청크마다
+  // 초기화되어 실제로는 누적 시간이 이미 지났는데도 영영 발동하지 않던 문제 수정. 이번 청크가 끝난
+  // 시점의 누적 경과시간/다음 발동 시각을 저장해뒀다가 다음 청크 호출 시 그대로 이어서 사용한다.
+  raidRun.timeCarry = result.raidTimeCarry;
   let i = 0;
   const comboState = { streak:0 };
   function step(){

@@ -3442,13 +3442,22 @@ function plantTree(woodType, rarityKey){
   farm.plots.push(plot);
   return { ok:true, plot };
 }
-// 심어진 식물/나무를 제거(재배치용). 소모한 재료는 반환하지 않는다.
+// [신규] 작물/나무 판매(제거) 시세 (보석). 등급(RARITY_MULT)과 강화 레벨에 비례해 더 많은 보석을 받는다.
+const FARM_PLOT_SELL_GEM_BASE = 10;
+function farmPlotSellGemValue(plot){
+  const enhanceMult = 1 + (plot.enhanceLevel||0) * 0.05;
+  return Math.round(FARM_PLOT_SELL_GEM_BASE * (RARITY_MULT[plot.rarityKey]||1) * enhanceMult);
+}
+// 심어진 식물/나무를 제거하고 보석으로 판매한다. 소모한 재료(씨앗/나무 등)는 반환하지 않는 대신 보석을 지급한다.
 function removeFarmPlot(plotId){
   const farm = state.farm;
   const idx = farm.plots.findIndex(p=>p.id===plotId);
-  if(idx<0) return false;
+  if(idx<0) return { ok:false };
+  const plot = farm.plots[idx];
+  const gemGain = farmPlotSellGemValue(plot);
   farm.plots.splice(idx,1);
-  return true;
+  state.gems += gemGain;
+  return { ok:true, gemGain };
 }
 // 강화 레벨에 따른 물 소모량(무한 강화, 레벨이 오를수록 지수적으로 증가).
 function plotEnhanceCost(plot){
@@ -3639,6 +3648,22 @@ function removeAnimal(animalId){
   if(!animal) return false;
   animal.placed = false;
   return true;
+}
+// [신규] 동물 등급별 판매 시세 (보석). 등급이 높을수록 RARITY_MULT에 비례해 더 많은 보석을 받는다.
+const ANIMAL_SELL_GEM_BASE = 15;
+function animalSellGemValue(rarityKey){
+  return Math.round(ANIMAL_SELL_GEM_BASE * (RARITY_MULT[rarityKey]||1));
+}
+// 동물을 영구히 판매해 보석으로 교환한다 (배치 여부와 무관하게 판매 가능, 배치되어 있었다면 함께 해제됨).
+function sellAnimal(animalId){
+  const ranch = state.ranch;
+  const idx = ranch.animals.findIndex(a=>a.id===animalId);
+  if(idx===-1) return { ok:false };
+  const animal = ranch.animals[idx];
+  const gemGain = animalSellGemValue(animal.rarityKey);
+  ranch.animals.splice(idx,1);
+  state.gems += gemGain;
+  return { ok:true, gemGain };
 }
 // lastTickAt부터 현재까지 경과 시간만큼 배치된 동물들의 생산량을 pending*에 누적한다. (오프라인 캐치업 포함)
 function tickRanchProduction(){
@@ -4659,7 +4684,10 @@ function renderRanchSub(){
         <span style="font-weight:700;font-size:12.5px;">${def.name||escapeHtml(a.kind)}</span>
       </div>
       <div style="font-size:10.5px;color:var(--text-dim);margin-top:4px;">초당 ${rewardLabel} +${perSec.toLocaleString(undefined,{maximumFractionDigits:2})}</div>
-      <button class="btn ${placedCard?'btn-secondary':'btn-primary'}" style="margin-top:6px;font-size:10.5px;padding:4px 8px;" data-ranch-${placedCard?'remove':'place'}="${a.id}">${placedCard?'배치 해제':'배치'}</button>
+      <div style="display:flex;gap:6px;margin-top:6px;">
+        <button class="btn ${placedCard?'btn-secondary':'btn-primary'}" style="flex:1;font-size:10.5px;padding:4px 8px;" data-ranch-${placedCard?'remove':'place'}="${a.id}">${placedCard?'배치 해제':'배치'}</button>
+        <button class="btn btn-danger" style="flex:1;font-size:10.5px;padding:4px 8px;" data-ranch-sell="${a.id}">${FARM_ICON_SVG.gem} 판매 (${animalSellGemValue(a.rarityKey)})</button>
+      </div>
     </div>`;
   };
   const placedHtml = placed.length
@@ -4745,6 +4773,13 @@ function renderRanchSub(){
       renderFarmTab();
     });
   });
+  box.querySelectorAll('[data-ranch-sell]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const res = sellAnimal(btn.dataset.ranchSell);
+      if(res.ok) showToast(`동물을 판매해 보석 +${res.gemGain.toLocaleString()}을(를) 받았습니다`);
+      renderAll();
+    });
+  });
   box.querySelectorAll('[data-ranch-use-scroll]').forEach(btn=>{
     btn.addEventListener('click', ()=>{
       const rarityKey = btn.dataset.ranchUseScroll;
@@ -4783,7 +4818,7 @@ function farmPlotCardHtml(plot){
     ${effectHtml}
     <div style="display:flex;flex-direction:column;gap:4px;margin-top:5px;">
       <button class="btn btn-primary" data-farm-enhance="${plot.id}" style="font-size:9px;padding:4px 7px;white-space:nowrap;">${FARM_ICON_SVG.water} 물로 강화 (물 ${enhanceCost})</button>
-      <button class="btn btn-danger" data-farm-remove="${plot.id}" style="font-size:9px;padding:4px 7px;">제거</button>
+      <button class="btn btn-danger" data-farm-remove="${plot.id}" style="font-size:9px;padding:4px 7px;">${FARM_ICON_SVG.gem} 판매 (${farmPlotSellGemValue(plot)})</button>
     </div>
   </div>`;
 }
@@ -4911,11 +4946,12 @@ function renderPetTab(){
   if(petSubTab==='gear') renderPetGearListSub();
 }
 let spiritSubTab = 'info';
+// [버그 수정] atkSpeed/idleExp가 labels에 빠져있어 영문 키(atkSpeed 등)가 그대로 노출되던 문제 수정.
 function spiritGearStatText(gear){
-  const labels = { atk:'공격력', hp:'체력', def:'방어력', crit:'치명타', critDmg:'치명타 피해', str:'힘', agi:'민첩', int:'지능', luk:'행운' };
+  const labels = { atk:'공격력', hp:'체력', def:'방어력', crit:'치명타', critDmg:'치명타 피해', str:'힘', agi:'민첩', int:'지능', luk:'행운', atkSpeed:'공격속도', idleExp:'비활성 경험치', goldFind:'골드 획득량', expFind:'경험치 획득량', buffDurationPct:'버프 지속시간' };
   return Object.entries(gear.stats||{}).map(([k,v])=>{
     const label = labels[k] || k;
-    const val = k==='crit' ? Math.round(v*1000)/10+'%' : k==='critDmg' ? '+'+v+'%' : '+'+v;
+    const val = (k==='crit') ? Math.round(v*1000)/10+'%' : (k==='critDmg'||k==='atkSpeed'||k==='idleExp'||k==='goldFind'||k==='expFind'||k==='buffDurationPct') ? '+'+v+'%' : '+'+v;
     return `${label} ${val}`;
   }).join(' · ');
 }
@@ -5050,8 +5086,8 @@ function renderSpiritGearSub(){
       ${petGearCompareHtml(g, equippedForSlot)}
       <div class="compare-cp-badge" style="color:${cpColor};font-size:10px;margin-top:2px;">${cpText}</div>
       <div style="display:flex;gap:6px;margin-top:4px;">
-        <button class="btn-icon" style="flex:1;" data-spirit-equip="${g.id}">장착</button>
-        <button class="btn-icon" style="flex:1;" data-spirit-sell="${g.id}">판매</button>
+        <button class="btn-icon" style="flex:1;max-width:none;" data-spirit-equip="${g.id}">장착</button>
+        <button class="btn-icon" style="flex:1;max-width:none;" data-spirit-sell="${g.id}">판매</button>
       </div>
     </div>`;
   }).join('');
@@ -5140,10 +5176,10 @@ function fishCardHtml(fish, opts){
     ${allLines.map(line=> `<div class="shop-rate" style="font-size:10.5px;line-height:1.15;margin-top:1px;">${line}</div>`).join('')}
     <div style="display:flex;gap:4px;margin-top:2px;align-items:stretch;">
       ${opts.inTank
-        ? `<button class="btn-icon" style="flex:1;padding:3px 4px;font-size:11px;" data-fish-remove="${fish.id}">꺼내기</button>
-           <button class="btn-icon" style="flex:2;padding:3px 4px;font-size:11px;line-height:1.2;" data-fish-sell-tank="${fish.id}">판매<br><span style="font-size:9px;font-weight:400;">${sellText}</span></button>`
-        : `<button class="btn-icon" style="flex:1;padding:3px 4px;font-size:11px;" data-fish-place="${fish.id}" ${opts.tankFull?'disabled':''}>넣기</button>
-           <button class="btn-icon" style="flex:2;padding:3px 4px;font-size:11px;line-height:1.2;" data-fish-sell-inv="${fish.id}">판매<br><span style="font-size:9px;font-weight:400;">${sellText}</span></button>`}
+        ? `<button class="btn-icon" style="flex:1;max-width:none;padding:3px 4px;font-size:11px;" data-fish-remove="${fish.id}">꺼내기</button>
+           <button class="btn-icon" style="flex:2;max-width:none;padding:3px 4px;font-size:11px;line-height:1.2;" data-fish-sell-tank="${fish.id}">판매<br><span style="font-size:9px;font-weight:400;">${sellText}</span></button>`
+        : `<button class="btn-icon" style="flex:1;max-width:none;padding:3px 4px;font-size:11px;" data-fish-place="${fish.id}" ${opts.tankFull?'disabled':''}>넣기</button>
+           <button class="btn-icon" style="flex:2;max-width:none;padding:3px 4px;font-size:11px;line-height:1.2;" data-fish-sell-inv="${fish.id}">판매<br><span style="font-size:9px;font-weight:400;">${sellText}</span></button>`}
     </div>
   </div>`;
 }
@@ -10311,7 +10347,7 @@ const EXPED_CONFIG = {
   WORLDBOSS_DMG_TAKEN_MULT: 0.0000001, // [7차 조정] 가하는 피해량을 0.0000001 수준으로 직접 지정: 기존 0.0001 -> 0.0000001
   WORLDBOSS_HP_BASE: 50000000,
   WORLDBOSS_HP_PER_LEVEL: 180000,
-  WORLDBOSS_HP_MULT: 2000, // [8차 조정] 체력을 대폭 상향(약 2.5배): 800 -> 2000
+  WORLDBOSS_HP_MULT: 20000, // [9차 조정] 체력을 10배 상향: 2000 -> 20000
   WORLDBOSS_DEF_MULT: 480000000, // [6차 조정] 방어력/마법방어력 50% 추가 상향: 320000000 -> 480000000
   WORLDBOSS_REWARD_MULT: 0.15, // 골드/보석 보상 산출값에 곱하는 배율 (85% 감소, 경험치/보스룬석 드롭은 제외)
   WORLDBOSS_GEM_REWARD_MULT: 2.5, // [신규] 월드보스 보석 보상 전용 추가 배율(2.5배): 골드에는 영향 없음
@@ -10439,15 +10475,20 @@ const WORLDBOSS_REBIRTH_SCALE = 0.12; // 보스를 처치하고 새로 태어날
 // [버전 관리] 밸런스 상수(HP/방어력 배율 등)를 바꿀 때마다 이 숫자를 올린다. 이미 저장된(진행 중인) 월드보스
 // 인스턴스가 옛날 밸런스로 생성된 것이라면, 버전이 다른 순간 자동으로 폐기되고 최신 밸런스로 새 보스가
 // 등장한다. 즉 밸런스를 조정하면 플레이어가 직접 뭘 안 해도 다음에 탭을 열 때 보스가 "새롭게" 나타난다.
-const WORLDBOSS_BALANCE_VERSION = 3;
+const WORLDBOSS_BALANCE_VERSION = 5;
+// [버그 수정 - 고정 난이도] 기존에는 보스 체력/방어력이 "지금 도전하는 캐릭터의 state.level"에 비례해서
+// 정해졌다. 이 때문에 레벨이 낮은 캐릭터로 들어가면 보스가 약하게 리스폰되고, 그 상태에서 훨씬 강한
+// 다른 캐릭터를 같은 파티에 태워서 몰아치면 최고 난이도를 손쉽게 잡아버리는 불균형이 있었다.
+// 이제 보스 스탯은 캐릭터 레벨과 완전히 무관하게, 오직 "누적 처치 횟수(defeats)"로만 강해지는
+// 고정된 하나의 전체 서버(계정) 공통 난이도 곡선을 따른다 (누가 몇 레벨로 들어오든 보스는 항상 동일).
+const WORLDBOSS_REF_LEVEL = 60; // 캐릭터 레벨 대신 사용하는 고정 기준치 (예전 "레벨 60 캐릭터가 도전" 상당의 방어력 규모를 유지하기 위함)
 function generateWorldBoss(){
-  // [전체 난이도 상향] 체력/방어력에 WORLDBOSS_DIFFICULTY_BUMP를 추가로 곱한다.
   const defeats = state.expedition.worldBossTotalDefeats||0;
   const rebirthMult = 1 + defeats*WORLDBOSS_REBIRTH_SCALE;
-  const hp = Math.round((EXPED_CONFIG.WORLDBOSS_HP_BASE + state.level*EXPED_CONFIG.WORLDBOSS_HP_PER_LEVEL) * EXPED_CONFIG.WORLDBOSS_HP_MULT * WORLDBOSS_DIFFICULTY_BUMP * rebirthMult);
-  const def = Math.round((20+state.level*3) * EXPED_CONFIG.WORLDBOSS_DEF_MULT * WORLDBOSS_DIFFICULTY_BUMP * rebirthMult);
-  const magicDef = Math.round((20+state.level*3) * EXPED_CONFIG.WORLDBOSS_DEF_MULT * WORLDBOSS_DIFFICULTY_BUMP * rebirthMult);
-  return { name:'차원을 삼킨 거수', level: state.level+50, atk:0, def, magicDef,
+  const hp = Math.round((EXPED_CONFIG.WORLDBOSS_HP_BASE + WORLDBOSS_REF_LEVEL*EXPED_CONFIG.WORLDBOSS_HP_PER_LEVEL) * EXPED_CONFIG.WORLDBOSS_HP_MULT * WORLDBOSS_DIFFICULTY_BUMP * rebirthMult);
+  const def = Math.round((20+WORLDBOSS_REF_LEVEL*3) * EXPED_CONFIG.WORLDBOSS_DEF_MULT * WORLDBOSS_DIFFICULTY_BUMP * rebirthMult);
+  const magicDef = Math.round((20+WORLDBOSS_REF_LEVEL*3) * EXPED_CONFIG.WORLDBOSS_DEF_MULT * WORLDBOSS_DIFFICULTY_BUMP * rebirthMult);
+  return { name:'차원을 삼킨 거수', level: WORLDBOSS_REF_LEVEL + 50 + Math.round(defeats*3), atk:0, def, magicDef,
     hp, maxHp:hp, isBoss:true, isWorldBoss:true, dmgTakenMult: EXPED_CONFIG.WORLDBOSS_DMG_TAKEN_MULT,
     balanceVersion: WORLDBOSS_BALANCE_VERSION };
 }
@@ -10786,10 +10827,15 @@ function buyRaidTicketWithGems(){
   showToast(`보석 ${RAID_TICKET_GEM_COST.toLocaleString()}개 · 골드 ${RAID_TICKET_GOLD_COST.toLocaleString()}으로 레이드 티켓을 구매했습니다.`);
   renderExpeditionTab();
 }
+// [버그 수정 - 고정 난이도] 기존에는 레이드 몬스터 스탯이 "지금 도전하는 캐릭터의 state.level"에 비례해
+// 정해졌다. 그래서 레벨 낮은 캐릭터로 입장하면 보스가 약하게 생성되는데, 거기에 훨씬 강한 다른 캐릭터를
+// 같은 파티로 태우면 최고 단계를 손쉽게 잡아버리는 불균형이 있었다. 이제 레이드 스탯은 캐릭터 레벨과
+// 완전히 무관하게, 오직 단계(stageDef.stage)로만 정해지는 고정 난이도를 따른다.
+const RAID_REF_LEVEL = 80; // 캐릭터 레벨 대신 사용하는 고정 기준치
 function generateRaidEnemy(stageDef){
   // [밸런스 조정] 레이드 몬스터 기본 스탯(HP/공격력/방어력/마법방어력) 자체를 전반적으로 상향한다.
   // (아래 dmgTakenMult로 적용되는 "플레이어가 가하는 피해를 약 0.00001% 수준으로 감쇠"와는 별개의 스탯 자체 상향이다.)
-  const base = 320 + state.level*55;
+  const base = 320 + RAID_REF_LEVEL*55;
   // [3차 상향] 체력 30배수 -> 36배수, 공격력 1.3배수 -> 1.5배수, 방어력 1.25배수 -> 1.4배수로 추가 상향
   // [4차 상향] 체력은 살짝 더(36 -> 40), 공격력은 한 단계 더(1.5 -> 1.8) 상향
   const hp = Math.round(base * stageDef.hpMult * 40);
@@ -10797,13 +10843,13 @@ function generateRaidEnemy(stageDef){
   // 그동안 여러 시스템(훈장/심볼/농장 등)으로 플레이어 방어력이 누적 상승해 공격력-방어력 차이가 거의 0에
   // 수렴, 매 타격이 최소치(1)로 깎여 체감상 "공격을 안 하는 것"처럼 보였다. 공격력/방어력/마법방어력/
   // 공격속도를 한 번 더 큰 폭으로 상향한다 (공격력 1.8배 -> 2.6배, 방어력 1.4배 -> 1.8배).
-  const atk = Math.round((14+state.level*2.2) * stageDef.atkMult * 2.6);
-  const def = Math.round((10+state.level*1.4) * stageDef.defMult * 1.8);
+  const atk = Math.round((14+RAID_REF_LEVEL*2.2) * stageDef.atkMult * 2.6);
+  const def = Math.round((10+RAID_REF_LEVEL*1.4) * stageDef.defMult * 1.8);
   const magicDef = Math.round(def * 1.6); // 마법방어력 배율도 1.4 -> 1.6로 상향
   // [5차 상향] 공격속도 기준점도 1.25 -> 1.6으로 상향, 단계당 증가폭도 0.12 -> 0.16으로 상향
   const atkSpeedMult = 1.6 + (stageDef.stage-1)*0.16;
   // [전체 난이도 상향] 레이드 최종 스탯에 RAID_DIFFICULTY_BUMP를 추가로 곱한다.
-  return { name:`[레이드] ${stageDef.name}`, level: state.level+stageDef.stage*8,
+  return { name:`[레이드] ${stageDef.name}`, level: RAID_REF_LEVEL+stageDef.stage*8,
     atk: Math.round(atk*RAID_DIFFICULTY_BUMP), def: Math.round(def*RAID_DIFFICULTY_BUMP), magicDef: Math.round(magicDef*RAID_DIFFICULTY_BUMP),
     hp: Math.round(hp*RAID_DIFFICULTY_BUMP), maxHp: Math.round(hp*RAID_DIFFICULTY_BUMP),
     isBoss:true, isRaid:true, stage: stageDef.stage, atkSpeedMult,
@@ -10918,6 +10964,12 @@ function runRaidChunk(){
   // 초기화되어 실제로는 누적 시간이 이미 지났는데도 영영 발동하지 않던 문제 수정. 이번 청크가 끝난
   // 시점의 누적 경과시간/다음 발동 시각을 저장해뒀다가 다음 청크 호출 시 그대로 이어서 사용한다.
   raidRun.timeCarry = result.raidTimeCarry;
+  // [버그 수정] 공격속도 상한이 사실상 없어서, 스탯이 많이 쌓인 캐릭터는 한 번의 청크(최대 MAX_BATTLE_ITER=20000회)에서
+  // 로그가 수천~수만 줄까지 쌓일 수 있었다. 이걸 90ms당 1줄씩 순차 재생하면(예: 로그 2만줄 = 약 30분) 사실상 화면이
+  // 멈춘 것처럼 보이고, 레이드는 여러 청크로 이어지므로 클리어할 때마다 이게 누적되어 브라우저가 매우 느려지는
+  // 원인이 됐다. 시험의 탑과 동일하게, 로그가 많을수록 여러 줄을 한 번에 묶어서 재생해 총 재생 시간을 bound한다.
+  const RAID_MAX_ANIM_STEPS = 80;
+  const raidStepInc = Math.max(1, Math.ceil(result.log.length / RAID_MAX_ANIM_STEPS));
   let i = 0;
   const comboState = { streak:0 };
   function step(){
@@ -10929,16 +10981,23 @@ function runRaidChunk(){
       if(result.outcome==='timeout'){ finishRaidChallenge('timeout'); return; }
       runRaidChunk(); return;
     }
-    const entry = result.log[i];
-    const l = document.createElement('div'); l.className=entry.cls; l.textContent=entry.text; logEl.appendChild(l); logEl.scrollTop = logEl.scrollHeight;
+    // 이번 프레임에서 묶어서 재생할 구간([i, nextI))의 마지막 항목만 실제로 화면에 반영한다
+    // (중간 항목들의 텍스트는 로그창에 순서대로 추가해 진행 흐름은 그대로 보여준다).
+    const nextI = Math.min(result.log.length, i + raidStepInc);
+    for(let j=i; j<nextI; j++){
+      const entry = result.log[j];
+      const l = document.createElement('div'); l.className=entry.cls; l.textContent=entry.text; logEl.appendChild(l);
+    }
+    logEl.scrollTop = logEl.scrollHeight;
     while(logEl.childNodes.length > 50) logEl.removeChild(logEl.firstChild);
+    const entry = result.log[nextI-1];
     const enHpEl = document.getElementById('raidEnHp'); if(enHpEl) enHpEl.style.width = clamp((entry.enHp/raidRun.enemy.maxHp)*100,0,100)+'%';
     const myHpEl = document.getElementById('raidMyHp'); if(myHpEl) myHpEl.style.width = clamp((entry.myHp/raidRun.playerStats.hp)*100,0,100)+'%';
     const myHpText = document.getElementById('raidMyHpText'); if(myHpText) myHpText.textContent = `${Math.round(Math.max(0,entry.myHp))}/${raidRun.playerStats.hp}`;
     const myManaEl = document.getElementById('raidMyMana'); if(myManaEl) myManaEl.style.width = clamp((entry.mana/raidRun.playerStats.maxMana)*100,0,100)+'%';
     const myManaText = document.getElementById('raidMyManaText'); if(myManaText) myManaText.textContent = `${Math.round(Math.max(0,entry.mana))}/${raidRun.playerStats.maxMana}`;
     renderStatusIcons('raidStatus', null, entry);
-    i++; setTimeout(step, 90);
+    i = nextI; setTimeout(step, 90);
   }
   step();
 }
@@ -12225,7 +12284,7 @@ function miningGearCardHtml(g, equipped){
       ${equipped ? '' : miningGearStatDeltaHtml(g)}
       <div style="display:flex;gap:4px;">
         <button class="btn ${equipped?'btn-danger':'btn-primary'}" style="flex:1;" data-toggle-gear="${g.id}">${equipped?'해제':'장착'}</button>
-        ${equipped ? '' : `<button class="btn-icon" style="flex:1;" data-sell-gear="${g.id}">판매 (${miningSellPrice(g.rarityKey).toLocaleString()}G)</button>`}
+        ${equipped ? '' : `<button class="btn-icon" style="flex:1;max-width:none;" data-sell-gear="${g.id}">판매 (${miningSellPrice(g.rarityKey).toLocaleString()}G)</button>`}
       </div>
     </div>`;
 }
@@ -12436,7 +12495,7 @@ function renderMiningStorageSub(){
       ${!eq ? '<div style="font-size:9px;color:var(--text-dim);margin-top:2px;">전투 능력치는 장착 시에만 적용됩니다 (도감 세트 보너스는 보유만 해도 적용)</div>' : ''}
       <div style="display:flex;gap:4px;margin-top:4px;">
         <button class="btn ${eq?'btn-danger':'btn-primary'}" style="flex:1;" data-toggle-jewel="${j.id}">${eq?'해제':'장착'}</button>
-        ${eq ? '' : `<button class="btn-icon" style="flex:1;" data-sell-jewel="${j.id}">판매 (${miningSellPrice(j.rarityKey).toLocaleString()}G)</button>`}
+        ${eq ? '' : `<button class="btn-icon" style="flex:1;max-width:none;" data-sell-jewel="${j.id}">판매 (${miningSellPrice(j.rarityKey).toLocaleString()}G)</button>`}
       </div>
     </div>`;
   }).join('');
@@ -14064,8 +14123,9 @@ on('farmSubFarm', 'click', (e)=>{
     return;
   }
   if(btn.dataset.farmRemove){
-    removeFarmPlot(btn.dataset.farmRemove);
-    renderFarmSub();
+    const res = removeFarmPlot(btn.dataset.farmRemove);
+    if(res.ok) showToast(`판매 완료! 보석 +${res.gemGain.toLocaleString()}을(를) 받았습니다`);
+    renderAll();
     return;
   }
   if(btn.dataset.farmEnhance){

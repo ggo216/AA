@@ -8806,8 +8806,10 @@ function abandonTowerRun(){
 }
 function generateTowerMedalItem(floor){
   const stats = {}; ['str','agi','vit','int','luk'].forEach(k=> stats[k] = Math.round(20 + floor*0.6));
+  // [밸런스 추가] 훈장 자체에 기본으로 올스탯% 옵션을 붙여준다 (층수가 높을수록 더 큼).
+  const allStatPct = Math.round((1.5 + floor*0.025)*10)/10;
   return { id:uid(), type:'medal', rarityKey:'mythic', name:`시험의 탑 ${floor}층 돌파 훈장`, stats, enhanceLevel:0,
-    reqLevel: state.level, affixes: [], scrollCount:0, socketedRune:null, socketedEffectStone:null };
+    reqLevel: state.level, affixes: [{ type:'allStatPct', value: allStatPct }], scrollCount:0, socketedRune:null, socketedEffectStone:null };
 }
 function finalizeTowerRun(reason){
   const run = towerRun;
@@ -8953,11 +8955,12 @@ function reissueTowerMedal(floor){
 const TOWER_HARD_MEDAL_FLOORS = [50, 100, 150, 175, 200];
 // [2차 상향] "하드모드 난이도를 많이 올려달라"는 요청에 따라 스탯 배율과 층별 성장 곡선을 추가로 상향.
 // 하드모드 몬스터 최종 스탯(atk/def/magicDef/hp)을 일반 모드 대비 몇 배로 만드는 배율. 10배 -> 25배로 상향.
-const TOWER_HARD_STAT_MULT = 25;
-// 층마다 강해지는 상승 곡선의 지수를 일반 모드보다 얼마나 더 가파르게 적용할지. 20% -> 60%로 대폭 상향.
-const TOWER_HARD_GROWTH_EXP_BUMP = 1.6;
+// [3차 상향] "하드모드 난이도를 더 올려달라"는 추가 요청에 따라 한 번 더 상향 (25배 -> 40배).
+const TOWER_HARD_STAT_MULT = 40;
+// 층마다 강해지는 상승 곡선의 지수를 일반 모드보다 얼마나 더 가파르게 적용할지. 60% -> 120%로 재상향.
+const TOWER_HARD_GROWTH_EXP_BUMP = 2.2;
 // 스탯 자체가 훨씬 커졌으므로, 플레이어가 가하는 피해 감쇠도 그만큼 더 낮춰 난이도가 실제로 훨씬 어렵게 체감되도록 한다.
-const TOWER_HARD_PLAYER_DMG_MULT = 0.000018; // 일반 모드(TOWER_PLAYER_DMG_MULT=0.0001)보다 훨씬 낮음
+const TOWER_HARD_PLAYER_DMG_MULT = 0.00001; // 일반 모드(TOWER_PLAYER_DMG_MULT=0.0001)보다 훨씬 낮음, 3차 상향으로 한 번 더 낮춤
 // 하드모드 보상 배율 (골드/경험치/보석 기본 공식에 곱해짐)
 const TOWER_HARD_REWARD_MULT = 4;
 // 하드모드 층별 스탯 성장 곡선 (towerFloorMult와 같은 형태이되 지수를 더 가파르게)
@@ -9152,10 +9155,13 @@ function abandonTowerHardRun(){
   towerHardRun.active = false;
   finalizeTowerHardRun('abandon');
 }
+// [밸런스 상향] "하드에서 얻는 훈장을 훨씬 좋게 해달라"는 요청에 따라 기본 스탯을 대폭 상향(약 3배)하고,
+// 일반 모드 훈장보다 훨씬 큰 올스탯% 옵션을 기본으로 붙인다.
 function generateTowerHardMedalItem(floor){
-  const stats = {}; ['str','agi','vit','int','luk'].forEach(k=> stats[k] = Math.round(40 + floor*1.2));
+  const stats = {}; ['str','agi','vit','int','luk'].forEach(k=> stats[k] = Math.round(120 + floor*3.5));
+  const allStatPct = Math.round((5 + floor*0.09)*10)/10;
   return { id:uid(), type:'medal', rarityKey:'mythic', name:`[HARD] 시험의 탑 ${floor}층 돌파 훈장`, stats, enhanceLevel:0,
-    reqLevel: state.level, affixes: [], scrollCount:0, socketedRune:null, socketedEffectStone:null };
+    reqLevel: state.level, affixes: [{ type:'allStatPct', value: allStatPct }], scrollCount:0, socketedRune:null, socketedEffectStone:null };
 }
 function finalizeTowerHardRun(reason){
   const run = towerHardRun;
@@ -9256,7 +9262,7 @@ function renderTowerHardTab(precomputedCp){
       </div>
     </div>
     <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;">${medalRow}</div>
-    <button class="btn btn-danger btn-block" id="towerHardStartBtn" style="background:#c9484f;">🔥 하드 모드 도전 시작 (1층부터)</button>
+    <button class="btn btn-danger btn-block" id="towerHardStartBtn" style="background:#c9484f;color:#fff;">🔥 하드 모드 도전 시작 (1층부터)</button>
     <div id="towerHardSummaryBox" style="margin-top:12px;"></div>
   `;
   bindTowerModeTabs(panel);

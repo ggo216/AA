@@ -4495,6 +4495,12 @@ let farmSubTab = 'farm';
 let farmPlantPickerMode = null; // null | 'crop' | 'tree' — 씨앗/나무 선택 피커 표시 여부
 let farmPlantPickerType = null; // null | FARM_SEED_TYPES/FARM_WOOD_TYPES 키 — 피커 2단계(등급 선택)에서 선택된 종류
 function renderFarmTab(){
+  // [버그 수정] renderFarmTab은 다른 탭 render 함수들과 달리 renderAll()의 "항상 호출" 목록에 빠져 있었고,
+  // 탭 숨김 가드도 없었다. 그 결과 사육장에서 동물 주문서를 사용해도 renderAll()만으로는 화면(수량 등)이
+  // 갱신되지 않아, 실제로는 이미 소모된 주문서를 다시 "사용"하려다 "찾을 수 없습니다" 오류가 나는 것처럼
+  // 보이는 문제가 있었다. 다른 탭과 동일한 가드를 추가하고 renderAll()에서도 호출하도록 한다.
+  const farmTabEl = document.getElementById('tab-farm');
+  if(!farmTabEl || farmTabEl.classList.contains('hidden')) return; // 탭이 보이지 않을 때는 무거운 재렌더링을 건너뛰어 성능 저하 방지
   tickFarmProduction(); // 화면 진입 시 최신 누적 보상을 먼저 계산한다
   document.querySelectorAll('#farmSubTabs button').forEach(b=> b.classList.toggle('active', b.dataset.farmsub===farmSubTab));
   document.getElementById('farmSubFarm').classList.toggle('hidden', farmSubTab!=='farm');
@@ -4527,7 +4533,7 @@ function renderRanchSub(){
     return `<div class="stat-box" style="margin-bottom:8px;">
       <div style="display:flex;align-items:center;gap:6px;">
         <span class="rarity-tag ${rarity.cls}">${rarity.label}</span>
-        <span style="font-weight:700;font-size:12.5px;">${escapeHtml(def.name||a.kind)}</span>
+        <span style="font-weight:700;font-size:12.5px;">${def.name||escapeHtml(a.kind)}</span>
       </div>
       <div style="font-size:10.5px;color:var(--text-dim);margin-top:4px;">초당 ${rewardLabel} +${perSec.toLocaleString(undefined,{maximumFractionDigits:2})}</div>
       <button class="btn ${placedCard?'btn-secondary':'btn-primary'}" style="margin-top:6px;font-size:10.5px;padding:4px 8px;" data-ranch-${placedCard?'remove':'place'}="${a.id}">${placedCard?'배치 해제':'배치'}</button>
@@ -4549,7 +4555,7 @@ function renderRanchSub(){
     ? `<div style="display:flex;flex-wrap:wrap;gap:8px;">${scrollRarityKeys.map(g=>{
         const rarity = RARITY_BY_KEY[g] || RARITIES[0];
         const cnt = scrollCountByRarity[g];
-        return `<div class="stat-box" style="flex:1 1 150px;min-width:150px;margin-bottom:0;position:relative;padding-right:34px;">
+        return `<div class="stat-box" style="flex:0 1 150px;min-width:150px;max-width:180px;margin-bottom:0;position:relative;padding-right:34px;">
           <span style="position:absolute;top:8px;right:8px;font-size:10.5px;font-weight:700;color:var(--accent);background:var(--bg-inset);border-radius:8px;padding:1px 6px;">${cnt}개</span>
           <div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;">
             <span class="rarity-tag ${rarity.cls}" style="white-space:nowrap;flex-shrink:0;">${rarity.label}</span>
@@ -4682,7 +4688,7 @@ function farmMaterialSummaryHtml(){
       ${FARM_ICON_SVG.brick} 벽돌: ${(mat.brick||0).toLocaleString()} · ${FARM_ICON_SVG.water} 물: ${(mat.water||0).toLocaleString()}
     </div>
     <div style="display:flex;align-items:center;gap:6px;margin-top:6px;flex-wrap:wrap;">
-      <select id="farmCleanupGradeSelect" style="font-size:9.5px;padding:3px 4px;">${gradeOptions}</select>
+      <select id="farmCleanupGradeSelect" class="rarity-select">${gradeOptions}</select>
       <button class="btn btn-secondary" id="farmBulkCleanupBtn" title="선택한 등급 이하의 씨앗/나무 재료를 3개당 물 1개로 일괄 정리합니다" style="font-size:9.5px;padding:4px 8px;">🧹 재료 정리 (→물)</button>
     </div>`;
 }
@@ -6949,6 +6955,7 @@ function renderAll(){
   renderSpiritTab();
   renderSkills();
   renderInventory(totals.cp);
+  renderFarmTab(); // [버그 수정] 농장/사육장 탭이 renderAll()의 "항상 호출" 목록에서 빠져있던 문제 수정
   // 전투/광산/PvP/뽑기 탭은 각자 "탭이 숨겨져 있으면 스킵"하는 가드를 갖고 있어 여기서 항상 호출해도 안전하다.
   // 이렇게 해야 다른 탭에 있는 동안 상태가 변경돼도(광산 탐험 완료, 전투 결과 등) 해당 탭으로 돌아왔을 때
   // 즉시 최신 상태가 보이며, 만약 그 탭이 이미 열려 있는 상태였다면 다른 탭으로 갔다가 돌아오지 않아도 바로 갱신된다.
@@ -8461,7 +8468,7 @@ function openPetAbsorbPicker(petId){
     <div class="detail-head"><div class="title">${escapeHtml(target.name)}에게 흡수시킬 펫 선택 (다중 선택 가능)</div><button class="detail-close" id="petAbsorbPickClose">&times;</button></div>
     <div style="font-size:10.5px;color:var(--text-dim);margin:6px 0 8px;">종족과 관계없이 아무 펫이나 흡수시키면 사라지는 대신 ${escapeHtml(target.name)}의 기본 능력치(공격·체력·방어)가 무작위 비율로 영구 증가하며, 확률적으로 다른 종류의 능력치도 함께 얻습니다. 여러 마리를 한 번에 선택해 한 번에 흡수시킬 수 있습니다.</div>
     <div style="display:flex;gap:6px;margin-bottom:8px;align-items:center;background:var(--bg-inset);border-radius:8px;padding:6px 8px;flex-wrap:wrap;">
-      <select id="petAbsorbRaritySelect" style="flex:1;min-width:80px;font-size:11px;">
+      <select id="petAbsorbRaritySelect" class="rarity-select" style="flex:1;min-width:80px;">
         ${PET_ABSORB_RARITY_ORDER.map(k=> `<option value="${k}" ${k==='rare'?'selected':''}>${RARITY_BY_KEY[k].label}</option>`).join('')}
       </select>
       <button class="btn btn-secondary" id="petAbsorbBelowRarityBtn" style="white-space:nowrap;flex-shrink:0;">이 등급 이하 전체 흡수</button>

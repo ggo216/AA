@@ -2898,8 +2898,36 @@ function freshWarehouse(){
     gemstones: 0, // [수정] "젬스톤"은 광산 보석이 아니라 5차 스킬 강화에 쓰는 재화(state.gemstones)를 의미했다.
     items: [],   // 장비 아이템 (인벤토리 장비와 동일한 구조)
     jewels: [],  // (미사용) 예전에 광산 보석용으로 만들었던 필드 - 하위호환을 위해 남겨둠
-    farmMaterials: { wood: freshFarmMaterialsWood(), seed: freshFarmMaterialsSeed(), brick: 0, water: 0 }
+    farmMaterials: { wood: freshFarmMaterialsWood(), seed: freshFarmMaterialsSeed(), brick: 0, water: 0 },
+    // [신규] 창고 이자 시스템: 매 시간 보유 골드/보석의 0.5%가 이자로 쌓이고, 별도로 모아뒀다가 한 번에 수령한다.
+    lastInterestAt: Date.now(),
+    pendingInterestGold: 0,
+    pendingInterestGems: 0
   };
+}
+const WAREHOUSE_INTEREST_RATE_PER_HOUR = 0.005; // 1시간당 0.5%
+const WAREHOUSE_INTEREST_MAX_HOURS = 240; // 최대 10일치까지만 한 번에 쌓임 (장기 방치 악용 방지)
+// 창고를 열거나 조작할 때마다 호출해, 마지막 계산 이후 지난 실제 시간만큼 이자를 쌓아준다.
+function accrueWarehouseInterest(){
+  const now = Date.now();
+  if(!warehouse.lastInterestAt){ warehouse.lastInterestAt = now; return; }
+  let hours = (now - warehouse.lastInterestAt) / 3600000;
+  if(hours <= 0) return;
+  hours = Math.min(hours, WAREHOUSE_INTEREST_MAX_HOURS);
+  const goldInterest = Math.floor((warehouse.gold||0) * WAREHOUSE_INTEREST_RATE_PER_HOUR * hours);
+  const gemInterest = Math.floor((warehouse.gems||0) * WAREHOUSE_INTEREST_RATE_PER_HOUR * hours);
+  warehouse.pendingInterestGold = (warehouse.pendingInterestGold||0) + goldInterest;
+  warehouse.pendingInterestGems = (warehouse.pendingInterestGems||0) + gemInterest;
+  warehouse.lastInterestAt = now;
+}
+async function claimWarehouseInterest(){
+  accrueWarehouseInterest();
+  const g = warehouse.pendingInterestGold||0, m = warehouse.pendingInterestGems||0;
+  if(g<=0 && m<=0){ showToast('받을 이자가 없습니다', true); return; }
+  state.gold += g; state.gems += m;
+  warehouse.pendingInterestGold = 0; warehouse.pendingInterestGems = 0;
+  await saveWarehouse(); scheduleSave(); showWarehouseModal(); renderAll();
+  showToast(`창고 이자로 골드 +${g.toLocaleString()} · 보석 +${m.toLocaleString()}을(를) 받았습니다`);
 }
 let warehouse = freshWarehouse();
 async function loadWarehouse(){
@@ -2912,7 +2940,9 @@ async function loadWarehouse(){
       if(!warehouse.farmMaterials) warehouse.farmMaterials = freshWarehouse().farmMaterials;
       if(!Array.isArray(warehouse.items)) warehouse.items = [];
       if(!Array.isArray(warehouse.jewels)) warehouse.jewels = [];
+      if(!warehouse.lastInterestAt) warehouse.lastInterestAt = Date.now();
     }
+    accrueWarehouseInterest();
   }catch(e){ console.error('[warehouse] 불러오기 실패', e); }
 }
 async function saveWarehouse(){
@@ -12677,6 +12707,21 @@ function engageGridMonster(idx){
   const monster = slot && slot.monster;
   if(!monster) return;
   hunt.battling = true;
+  // [버그 수정] hunt.playerStats는 기존에 레벨업 시에만 갱신되어, 사냥 도중 장비를 새로 장착/교체/강화하거나
+  // (특히 창고에서 다른 캐릭터의 장비를 꺼내 착용하는 경우) 전투에는 전혀 반영되지 않고 사냥을 시작한 시점의
+  // 낡은 스탯 그대로 계속 싸우는 문제가 있었다. 그래서 전투력/능력치 카드에는 강해진 수치가 보이는데 실제
+  // 던전에서는 예전 약한 공격력으로 싸워 데미지가 이상하게 낮아 보였다. 몬스터와 교전을 시작할 때마다
+  // 최신 스탯으로 다시 계산해서 반영한다 (현재 HP/마나는 비율을 유지해서 새 최대치에 맞춰 조정).
+  const freshHuntStats = computeTotals();
+  if(hunt.playerStats){
+    const hpRatio = hunt.playerStats.hp>0 ? hunt.hp/hunt.playerStats.hp : 1;
+    const manaRatio = hunt.playerStats.maxMana>0 ? hunt.mana/hunt.playerStats.maxMana : 1;
+    hunt.playerStats = freshHuntStats;
+    hunt.hp = clamp(Math.round(freshHuntStats.hp*hpRatio), 0, freshHuntStats.hp);
+    hunt.mana = clamp(Math.round(freshHuntStats.maxMana*manaRatio), 0, freshHuntStats.maxMana);
+  } else {
+    hunt.playerStats = freshHuntStats;
+  }
   renderHuntGrid();
   const area = document.getElementById('huntBattleArea');
   if(!area) return;
@@ -14110,6 +14155,31 @@ async function withdrawFarmPool(typeKey){
   await saveWarehouse(); scheduleSave(); showWarehouseModal(); renderAll();
   showToast(`${typeKey==='wood'?'나무':'씨앗'} 전체를 창고에서 인출했습니다`);
 }
+// [신규] 종류(typeKey)/등급(rarityKey) 단위로 원하는 수량만 예치/인출
+async function depositFarmUnit(poolKey, typeKey, rarityKey, qty){
+  const amt = Math.floor(Math.max(0, qty));
+  const src = state.farm.materials[poolKey][typeKey];
+  const have = (src && src[rarityKey]) || 0;
+  if(amt<=0){ showToast('예치할 수량을 입력해주세요', true); return; }
+  if(amt>have){ showToast('보유 수량보다 많이 예치할 수 없습니다', true); return; }
+  state.farm.materials[poolKey][typeKey][rarityKey] -= amt;
+  if(!warehouse.farmMaterials[poolKey][typeKey]) warehouse.farmMaterials[poolKey][typeKey] = freshFarmMaterialTypePool();
+  warehouse.farmMaterials[poolKey][typeKey][rarityKey] = (warehouse.farmMaterials[poolKey][typeKey][rarityKey]||0) + amt;
+  await saveWarehouse(); scheduleSave(); showWarehouseModal(); renderAll();
+  showToast(`${amt.toLocaleString()}개를 창고에 예치했습니다`);
+}
+async function withdrawFarmUnit(poolKey, typeKey, rarityKey, qty){
+  const amt = Math.floor(Math.max(0, qty));
+  const src = warehouse.farmMaterials[poolKey][typeKey];
+  const have = (src && src[rarityKey]) || 0;
+  if(amt<=0){ showToast('인출할 수량을 입력해주세요', true); return; }
+  if(amt>have){ showToast('창고 보관 수량보다 많이 인출할 수 없습니다', true); return; }
+  warehouse.farmMaterials[poolKey][typeKey][rarityKey] -= amt;
+  if(!state.farm.materials[poolKey][typeKey]) state.farm.materials[poolKey][typeKey] = freshFarmMaterialTypePool();
+  state.farm.materials[poolKey][typeKey][rarityKey] = (state.farm.materials[poolKey][typeKey][rarityKey]||0) + amt;
+  await saveWarehouse(); scheduleSave(); showWarehouseModal(); renderAll();
+  showToast(`${amt.toLocaleString()}개를 창고에서 인출했습니다`);
+}
 async function depositFarmFlat(key){
   const amt = state.farm.materials[key]||0;
   if(amt<=0){ showToast('예치할 재료가 없습니다', true); return; }
@@ -14159,6 +14229,9 @@ function showWarehouseModal(){
   ];
   let bodyHtml = '';
   if(warehouseSubTab==='currency'){
+    accrueWarehouseInterest();
+    const pendingGold = warehouse.pendingInterestGold||0;
+    const pendingGems = warehouse.pendingInterestGems||0;
     bodyHtml = `
       <div class="wh-currency-box" style="display:flex;flex-direction:column;gap:10px;">
         <div style="background:var(--bg-inset);border:1px solid var(--border-soft);border-radius:10px;padding:10px 12px;">
@@ -14176,6 +14249,11 @@ function showWarehouseModal(){
             <button class="btn btn-primary" id="whGemDepositBtn" style="flex-shrink:0;">예치</button>
             <button class="btn btn-secondary" id="whGemWithdrawBtn" style="flex-shrink:0;">인출</button>
           </div>
+        </div>
+        <div style="background:var(--bg-inset);border:1px solid var(--gold);border-radius:10px;padding:10px 12px;">
+          <div style="font-size:11px;color:var(--text-dim);margin-bottom:2px;">창고 이자 (1시간마다 보관 골드/보석의 0.5%)</div>
+          <div style="font-size:12.5px;color:var(--gold);margin-bottom:6px;">쌓인 이자: 골드 +${pendingGold.toLocaleString()} · 보석 +${pendingGems.toLocaleString()}</div>
+          <button class="btn btn-primary" id="whClaimInterestBtn" style="width:100%;" ${(pendingGold<=0 && pendingGems<=0) ? 'disabled' : ''}>이자 받기</button>
         </div>
       </div>`;
   } else if(warehouseSubTab==='equip'){
@@ -14202,22 +14280,41 @@ function showWarehouseModal(){
         </div>
       </div>`;
   } else if(warehouseSubTab==='farm'){
-    const mySeed = sumFarmMaterialPool(state.farm.materials.seed);
-    const myWood = sumFarmMaterialPool(state.farm.materials.wood);
-    const whSeed = sumFarmMaterialPool(warehouse.farmMaterials.seed);
-    const whWood = sumFarmMaterialPool(warehouse.farmMaterials.wood);
-    const row = (label, mine, wh, depositAttr, withdrawAttr)=> `
+    const RARITY_LABEL = {}; RARITIES.forEach(r=> RARITY_LABEL[r.key]=r.label);
+    const unitRow = (poolKey, typeKey, typeLabel, rarityKey)=>{
+      const mine = (state.farm.materials[poolKey][typeKey] && state.farm.materials[poolKey][typeKey][rarityKey]) || 0;
+      const wh = (warehouse.farmMaterials[poolKey][typeKey] && warehouse.farmMaterials[poolKey][typeKey][rarityKey]) || 0;
+      if(mine<=0 && wh<=0) return '';
+      const rid = `${poolKey}_${typeKey}_${rarityKey}`;
+      return `<div style="display:flex;align-items:center;gap:6px;padding:6px 8px;border-bottom:1px solid var(--border-soft);">
+        <div style="font-size:11px;min-width:0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${typeLabel} <span style="color:var(--text-dim);">[${RARITY_LABEL[rarityKey]||rarityKey}]</span><br><span style="color:var(--text-dim);font-size:10px;">보유 ${mine.toLocaleString()} · 창고 ${wh.toLocaleString()}</span></div>
+        <input type="number" id="whFarmQty_${rid}" placeholder="수량" style="width:64px;flex-shrink:0;background:var(--bg-panel);border:1px solid var(--border-soft);border-radius:8px;padding:6px 6px;color:var(--text);font-size:11px;">
+        <button class="btn btn-primary" style="flex-shrink:0;font-size:10.5px;padding:5px 7px;" data-wh-deposit-farm-unit="${rid}">예치</button>
+        <button class="btn btn-secondary" style="flex-shrink:0;font-size:10.5px;padding:5px 7px;" data-wh-withdraw-farm-unit="${rid}">인출</button>
+      </div>`;
+    };
+    const section = (poolKey, types, labelMap)=>{
+      let rows = '';
+      types.forEach(typeKey=>{
+        RARITY_ORDER.forEach(rarityKey=>{ rows += unitRow(poolKey, typeKey, labelMap[typeKey], rarityKey); });
+      });
+      if(!rows) rows = '<div style="padding:12px;font-size:11px;color:var(--text-dim);text-align:center;">보유/창고 수량이 없습니다</div>';
+      return `<div style="border:1px solid var(--border-soft);border-radius:8px;max-height:220px;overflow-y:auto;margin-bottom:10px;">${rows}</div>`;
+    };
+    const flatRow = (label, key)=> `
       <div style="background:var(--bg-inset);border:1px solid var(--border-soft);border-radius:10px;padding:10px 12px;margin-bottom:8px;">
-        <div style="font-size:11px;color:var(--text-dim);margin-bottom:6px;">${label} · 보유 ${mine.toLocaleString()}개 · 창고 ${wh.toLocaleString()}개</div>
+        <div style="font-size:11px;color:var(--text-dim);margin-bottom:6px;">${label} · 보유 ${(state.farm.materials[key]||0).toLocaleString()}개 · 창고 ${(warehouse.farmMaterials[key]||0).toLocaleString()}개</div>
         <div style="display:flex;gap:6px;">
-          <button class="btn btn-primary" style="flex:1;" ${depositAttr}>전체 예치</button>
-          <button class="btn btn-secondary" style="flex:1;" ${withdrawAttr}>전체 인출</button>
+          <button class="btn btn-primary" style="flex:1;" data-wh-deposit-farm-flat="${key}">전체 예치</button>
+          <button class="btn btn-secondary" style="flex:1;" data-wh-withdraw-farm-flat="${key}">전체 인출</button>
         </div>
       </div>`;
-    bodyHtml = row('씨앗', mySeed, whSeed, 'data-wh-deposit-farm="seed"', 'data-wh-withdraw-farm="seed"')
-      + row('나무', myWood, whWood, 'data-wh-deposit-farm="wood"', 'data-wh-withdraw-farm="wood"')
-      + row('벽돌', state.farm.materials.brick||0, warehouse.farmMaterials.brick||0, 'data-wh-deposit-farm-flat="brick"', 'data-wh-withdraw-farm-flat="brick"')
-      + row('물', state.farm.materials.water||0, warehouse.farmMaterials.water||0, 'data-wh-deposit-farm-flat="water"', 'data-wh-withdraw-farm-flat="water"');
+    bodyHtml = `<div class="detail-section-label" style="justify-content:flex-start;">씨앗</div>`
+      + section('seed', FARM_SEED_TYPES, FARM_SEED_LABEL)
+      + `<div class="detail-section-label" style="justify-content:flex-start;">나무</div>`
+      + section('wood', FARM_WOOD_TYPES, FARM_WOOD_LABEL)
+      + flatRow('벽돌', 'brick')
+      + flatRow('물', 'water');
   }
   overlay.innerHTML = `
     <div class="modal-box" style="max-width:480px;">
@@ -14261,6 +14358,24 @@ function showWarehouseModal(){
   overlay.querySelectorAll('button[data-wh-withdraw-farm]').forEach(btn=> btn.addEventListener('click', ()=> withdrawFarmPool(btn.dataset.whWithdrawFarm)));
   overlay.querySelectorAll('button[data-wh-deposit-farm-flat]').forEach(btn=> btn.addEventListener('click', ()=> depositFarmFlat(btn.dataset.whDepositFarmFlat)));
   overlay.querySelectorAll('button[data-wh-withdraw-farm-flat]').forEach(btn=> btn.addEventListener('click', ()=> withdrawFarmFlat(btn.dataset.whWithdrawFarmFlat)));
+  overlay.querySelectorAll('button[data-wh-deposit-farm-unit]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const rid = btn.dataset.whDepositFarmUnit;
+      const [poolKey, typeKey, rarityKey] = rid.split('_');
+      const input = document.getElementById(`whFarmQty_${rid}`);
+      depositFarmUnit(poolKey, typeKey, rarityKey, Number(input && input.value)||0);
+    });
+  });
+  overlay.querySelectorAll('button[data-wh-withdraw-farm-unit]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const rid = btn.dataset.whWithdrawFarmUnit;
+      const [poolKey, typeKey, rarityKey] = rid.split('_');
+      const input = document.getElementById(`whFarmQty_${rid}`);
+      withdrawFarmUnit(poolKey, typeKey, rarityKey, Number(input && input.value)||0);
+    });
+  });
+  const claimInterestBtn = document.getElementById('whClaimInterestBtn');
+  if(claimInterestBtn) claimInterestBtn.addEventListener('click', ()=> claimWarehouseInterest());
 }
 
 /* =============================================================

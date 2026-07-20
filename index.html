@@ -3520,6 +3520,13 @@ function tickFarmProduction(){
     });
     farm.pendingGold += gold; farm.pendingExp += exp; farm.pendingGems += gems;
   }
+  // [버그 수정] 수거를 오래 안 해서 적립 한도(maxAccrualSec)를 이미 넘긴 상태로 새 작물을 심으면,
+  // curSinceHarvestSec/prevSinceHarvestSec가 둘 다 캡에 걸려 elapsedSec이 항상 0이 되어
+  // 새로 심은 작물조차 영원히 생산량이 0으로 고정되는 소프트락이 있었다.
+  // 미수거 보상이 전혀 없는(0) 상태에서 캡에 도달해 있다면, 잃을 것이 없으므로 기준 시각을 지금으로 재설정해 다시 생산이 시작되게 한다.
+  if(curSinceHarvestSec >= maxAccrualSec && farm.pendingGold<=0 && farm.pendingExp<=0 && farm.pendingGems<=0){
+    farm.lastHarvestAt = now;
+  }
   // [신규] 작물/나무별 주기적 특수 보상 드랍 판정 (일정 간격마다 낮은 확률로 젬스톤/보석/경험치버프/정령의 힘/신성한 장비 주문서 중 하나 드랍).
   // 보상 적립 캡과는 별개로, 실제 경과 시간(now) 기준으로 판정하되 한 번의 tick에서 무한정 반복되지 않도록 안전장치(guard)를 둔다.
   farm.plots.forEach(p=>{

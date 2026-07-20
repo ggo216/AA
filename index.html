@@ -2553,6 +2553,9 @@ function freshState(){
     gold: 300,
     gems: 1000,
     expBoostUntil: 0,
+    exp4xFragments: 0, // [신규] 4배 경험치 쿠폰 조각 (전투 중 저확률 드랍, 5개 모으면 쿠폰 1개 제작)
+    exp4xCoupons: 0,   // [신규] 제작된 4배 경험치 쿠폰 개수 (사용 시 10분간 경험치 4배)
+    exp4xUntil: 0,     // [신규] 4배 경험치 쿠폰 사용 중일 때 만료 시각(ms)
     skillPoints: 0,
     job: null,
     jobRank: 1,
@@ -2825,6 +2828,9 @@ function normalizeState(data){
   // lastTickAt을 이어받는다 (기존 진행분이 갑자기 캡에 걸려 손해보지 않도록 최대한 보수적으로 처리).
   merged.farm.lastHarvestAt = (data.farm && data.farm.lastHarvestAt) || merged.farm.lastTickAt || Date.now();
   merged.expBoostUntil = (data.expBoostUntil) || 0;
+  merged.exp4xFragments = (data.exp4xFragments) || 0;
+  merged.exp4xCoupons = (data.exp4xCoupons) || 0;
+  merged.exp4xUntil = (data.exp4xUntil) || 0;
 
   const freshRanch = freshState().ranch;
   merged.ranch = Object.assign({}, freshRanch, data.ranch||{});
@@ -6984,27 +6990,53 @@ function renderBoosterShop(){
   const box = document.getElementById('boosterShop');
   if(!box) return;
   const active = isExpBoostActive();
+  const frag = state.exp4xFragments||0, coupons = state.exp4xCoupons||0;
   box.innerHTML = `
     <div class="shop-item">
       <div class="shop-name">경험치 2배 쿠폰 (10분권)</div>
       <div class="shop-rate" id="boosterShopRate"></div>
       <button class="btn btn-secondary btn-block" id="buyExpBoostBtn">${EXP_BOOST_COST.toLocaleString()} 보석${active?' (연장)':''}</button>
+    </div>
+    <div class="shop-item">
+      <div class="shop-name">경험치 4배 쿠폰 (10분권)</div>
+      <div class="shop-rate" id="exp4xShopRate"></div>
+      <div style="font-size:10.5px;color:var(--text-dim);margin:4px 0;">조각 ${frag}/${EXP4X_FRAGMENTS_NEEDED} · 보유 쿠폰 ${coupons}개<br>전투 승리 시 저확률로 조각 드랍</div>
+      <div style="display:flex;gap:6px;">
+        <button class="btn btn-secondary" id="craftExp4xBtn" style="flex:1;" ${frag<EXP4X_FRAGMENTS_NEEDED?'disabled':''}>제작</button>
+        <button class="btn btn-primary" id="useExp4xBtn" style="flex:1;" ${coupons<=0?'disabled':''}>사용</button>
+      </div>
     </div>`;
   const btn = document.getElementById('buyExpBoostBtn');
   if(btn) btn.addEventListener('click', buyExpBoost);
+  const craftBtn = document.getElementById('craftExp4xBtn');
+  if(craftBtn) craftBtn.addEventListener('click', craftExp4xCoupon);
+  const useBtn = document.getElementById('useExp4xBtn');
+  if(useBtn) useBtn.addEventListener('click', useExp4xCoupon);
   updateBoosterShopTimer();
 }
 // 1초마다 도는 타이머에서는 남은 시간 텍스트만 가볍게 갱신한다 (매초 innerHTML 전체 재생성/리스너 재바인딩 방지)
 function updateBoosterShopTimer(){
   const rateEl = document.getElementById('boosterShopRate');
-  if(!rateEl) return;
-  const active = isExpBoostActive();
-  if(active){
-    const remainMs = state.expBoostUntil - Date.now();
-    const remainText = `${Math.floor(remainMs/60000)}분 ${Math.floor((remainMs%60000)/1000)}초 남음`;
-    rateEl.innerHTML = `<span style="color:var(--ok);">사용중 · ${remainText}</span>`;
-  } else {
-    rateEl.textContent = '사용 시 10분간 경험치 획득량 2배';
+  if(rateEl){
+    const active = isExpBoostActive();
+    if(active){
+      const remainMs = state.expBoostUntil - Date.now();
+      const remainText = `${Math.floor(remainMs/60000)}분 ${Math.floor((remainMs%60000)/1000)}초 남음`;
+      rateEl.innerHTML = `<span style="color:var(--ok);">사용중 · ${remainText}</span>`;
+    } else {
+      rateEl.textContent = '사용 시 10분간 경험치 획득량 2배';
+    }
+  }
+  const exp4xRateEl = document.getElementById('exp4xShopRate');
+  if(exp4xRateEl){
+    const active4x = isExp4xActive();
+    if(active4x){
+      const remainMs = state.exp4xUntil - Date.now();
+      const remainText = `${Math.floor(remainMs/60000)}분 ${Math.floor((remainMs%60000)/1000)}초 남음`;
+      exp4xRateEl.innerHTML = `<span style="color:var(--ok);">사용중 · ${remainText}</span>`;
+    } else {
+      exp4xRateEl.textContent = '사용 시 10분간 경험치 획득량 4배';
+    }
   }
 }
 function renderSpecialTicketShop(){
@@ -7610,6 +7642,43 @@ function buyExpBoost(){
   const base = Math.max(Date.now(), state.expBoostUntil||0);
   state.expBoostUntil = base + EXP_BOOST_MS;
   showToast('경험치 2배 쿠폰 사용! 10분간 경험치 획득량이 2배가 됩니다');
+  renderAll();
+  renderBoosterShop();
+}
+// [신규] 4배 경험치 쿠폰: 전투 승리 시 저확률로 "조각"이 드랍되고, 조각 5개를 모으면 쿠폰 1개를 제작할 수 있다.
+// 쿠폰 1개를 사용하면 10분간 경험치 획득량이 4배가 된다 (기존 2배 쿠폰과는 중첩되지 않고 더 높은 배율만 적용됨).
+const EXP4X_FRAGMENTS_NEEDED = 5;
+const EXP4X_BOOST_MS = 10*60*1000;
+const EXP4X_MULT = 4;
+const EXP4X_FRAGMENT_DROP_CHANCE = 0.02; // 전투 승리당 2% 확률로 조각 1개 드랍
+function isExp4xActive(){ return Date.now() < (state.exp4xUntil||0); }
+// 2배/4배 쿠폰이 동시에 활성화되어도 곱연산으로 중첩되지 않도록, 더 높은 배율만 적용하는 헬퍼.
+function currentExpCouponMult(){
+  if(isExp4xActive()) return EXP4X_MULT;
+  if(isExpBoostActive()) return EXP_BOOST_MULT;
+  return 1;
+}
+// 전투 승리 지점에서 호출: 저확률로 4배 쿠폰 조각을 지급한다.
+function rollExp4xFragmentDrop(){
+  if(Math.random() < EXP4X_FRAGMENT_DROP_CHANCE){
+    state.exp4xFragments = (state.exp4xFragments||0) + 1;
+    showToast(`4배 경험치 쿠폰 조각 획득! (${state.exp4xFragments}/${EXP4X_FRAGMENTS_NEEDED})`);
+  }
+}
+function craftExp4xCoupon(){
+  if((state.exp4xFragments||0) < EXP4X_FRAGMENTS_NEEDED){ showToast('조각이 부족합니다', true); return; }
+  state.exp4xFragments -= EXP4X_FRAGMENTS_NEEDED;
+  state.exp4xCoupons = (state.exp4xCoupons||0) + 1;
+  showToast('4배 경험치 쿠폰을 제작했습니다!');
+  renderAll();
+  renderBoosterShop();
+}
+function useExp4xCoupon(){
+  if((state.exp4xCoupons||0) <= 0){ showToast('보유한 4배 쿠폰이 없습니다', true); return; }
+  state.exp4xCoupons -= 1;
+  const base = Math.max(Date.now(), state.exp4xUntil||0);
+  state.exp4xUntil = base + EXP4X_BOOST_MS;
+  showToast('4배 경험치 쿠폰 사용! 10분간 경험치 획득량이 4배가 됩니다');
   renderAll();
   renderBoosterShop();
 }
@@ -8893,6 +8962,7 @@ function finishTowerFloor(result, enemy, timedOut){
     const goldGain = Math.round(enemy.level*8 + towerRun.floor*6);
     const expGain = Math.round(enemy.level*12 + towerRun.floor*10);
     const gemGain = randInt(10,25) + (enemy.isMajor?60:enemy.isMid?24:0);
+    rollExp4xFragmentDrop();
     state.gold += goldGain; state.gems += gemGain;
     gainExp(expGain);
     towerRun.totals.gold += goldGain; towerRun.totals.gems += gemGain; towerRun.totals.exp += expGain;
@@ -9252,6 +9322,7 @@ function finishTowerHardFloor(result, enemy, timedOut){
     const goldGain = Math.round((enemy.level*8 + towerHardRun.floor*6) * TOWER_HARD_REWARD_MULT);
     const expGain = Math.round((enemy.level*12 + towerHardRun.floor*10) * TOWER_HARD_REWARD_MULT);
     const gemGain = Math.round((randInt(10,25) + (enemy.isMajor?60:enemy.isMid?24:0)) * TOWER_HARD_REWARD_MULT);
+    rollExp4xFragmentDrop();
     state.gold += goldGain; state.gems += gemGain;
     gainExp(expGain);
     towerHardRun.totals.gold += goldGain; towerHardRun.totals.gems += gemGain; towerHardRun.totals.exp += expGain;
@@ -11429,7 +11500,8 @@ function finishSingleBattle(result, playerStats, enemy, source){
     line.textContent = `승리! ${enemy.name}을(를) 물리쳤습니다.`;
     if(source && source.kind==='boss'){ state.bossesCleared[source.boss.id] = true; }
     goldGain = Math.round((enemy.level*40 + randInt(20,60)) * (1+playerStats.goldFindPct/100));
-    expGain = Math.round((enemy.level*60 + randInt(20,40) + 50) * (1+playerStats.expFindPct/100) * (isExpBoostActive()?EXP_BOOST_MULT:1));
+    expGain = Math.round((enemy.level*60 + randInt(20,40) + 50) * (1+playerStats.expFindPct/100) * currentExpCouponMult());
+    rollExp4xFragmentDrop();
     gemGain = Math.round(randInt(160,320) * (1+(playerStats.gemFindPct||0)/100));
     // [밸런스 조정] 던전보스는 기존에 100% 확정 드롭이었으나, 몬스터 처치 드롭(확률 게이트)과 형평을 맞추기 위해
     // 보스인 만큼 일반 몬스터보다는 높은 확률(30%)의 드롭 게이트를 추가한다.
@@ -12814,7 +12886,8 @@ function grantKillReward(monster, mult){
   const specialExpMult = hunt.special ? 1.5 : 1;
   const specialDropMult = hunt.special ? 1.1 : 1;
   const goldGain = Math.round((monster.level*10 + randInt(0,15)) * (1+hunt.playerStats.goldFindPct/100) * mult);
-  const expGain = Math.round((monster.level*15 + randInt(0,10)) * (1+hunt.playerStats.expFindPct/100) * mult * specialExpMult * (isExpBoostActive()?EXP_BOOST_MULT:1));
+  const expGain = Math.round((monster.level*15 + randInt(0,10)) * (1+hunt.playerStats.expFindPct/100) * mult * specialExpMult * currentExpCouponMult());
+  rollExp4xFragmentDrop();
   let gemGain = 0; if(Math.random()<0.3) gemGain = Math.round(randInt(20,60) * (1+(hunt.playerStats.gemFindPct||0)/100));
   let itemDrop = null; if(mult>=1 && Math.random()<0.06*specialDropMult) itemDrop = generateItem(null, bias, state.job, monster.level); // [밸런스 조정] 드롭률 9% -> 6%로 하향
   // [신규] 젬스톤: 5차 스킬 전용 강화(gemEnhanceSkill)에 사용되는 재료. 몬스터 처치 시 낮은 확률로 드롭.

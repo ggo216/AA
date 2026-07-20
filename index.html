@@ -633,6 +633,7 @@
         <button class="btn-icon" id="authBtn">로그인</button>
         <button class="btn-icon" id="saveBtn">저장</button>
         <button class="btn-icon" id="backupBtn">백업</button>
+        <button class="btn-icon" id="warehouseBtn">창고</button>
         <button class="btn-icon" id="switchBtn">캐릭터 변경</button>
       </div>
     </div>
@@ -2884,6 +2885,39 @@ async function storageSet(key, value){
 async function storageDelete(key){
   if(storageBackend === 'native') return window.storage.delete(key, false);
   if(storageBackend === 'local') window.localStorage.removeItem(LS_PREFIX+key);
+}
+
+/* =============================================================
+   창고 (WAREHOUSE) — 5개 캐릭터 슬롯이 모두 공유하는 저장소.
+   슬롯별 state와 완전히 분리된 별도 키('warehouse_shared')에 저장되어, 어느 캐릭터로 접속해도
+   같은 내용을 보고 꺼내 쓸 수 있다. 골드/보석 잔액, 장비, 광산 젬스톤, 농장 소모품(씨앗/나무/벽돌/물)을 담을 수 있다.
+   ============================================================= */
+function freshWarehouse(){
+  return {
+    gold: 0, gems: 0,
+    items: [],   // 장비 아이템 (인벤토리 장비와 동일한 구조)
+    jewels: [],  // 광산 젬스톤 (state.mining.jewels와 동일한 구조)
+    farmMaterials: { wood: freshFarmMaterialsWood(), seed: freshFarmMaterialsSeed(), brick: 0, water: 0 }
+  };
+}
+let warehouse = freshWarehouse();
+async function loadWarehouse(){
+  if(!hasStorage) return;
+  try{
+    const res = await storageGet('warehouse_shared');
+    if(res && res.value){
+      const parsed = JSON.parse(res.value);
+      warehouse = Object.assign(freshWarehouse(), parsed);
+      if(!warehouse.farmMaterials) warehouse.farmMaterials = freshWarehouse().farmMaterials;
+      if(!Array.isArray(warehouse.items)) warehouse.items = [];
+      if(!Array.isArray(warehouse.jewels)) warehouse.jewels = [];
+    }
+  }catch(e){ console.error('[warehouse] 불러오기 실패', e); }
+}
+async function saveWarehouse(){
+  if(!hasStorage) return;
+  try{ await storageSet('warehouse_shared', JSON.stringify(warehouse)); }
+  catch(e){ console.error('[warehouse] 저장 실패', e); showToast('창고 저장에 실패했습니다', true); }
 }
 
 /* =============================================================
@@ -13937,12 +13971,260 @@ on('switchBtn', 'click', async ()=>{
   if(hasStorage && currentSlotId){ clearTimeout(saveTimer); await saveSlot(currentSlotId, state); }
   showSlotSelect(!!(currentSlotId && state.job));
 });
+on('warehouseBtn', 'click', ()=> showWarehouseModal());
+
+/* =============================================================
+   창고 (WAREHOUSE) UI
+   ============================================================= */
+let warehouseSubTab = 'currency';
+function mergeFarmMaterialPoolInto(target, source){
+  Object.keys(source||{}).forEach(typeKey=>{
+    if(!target[typeKey]) target[typeKey] = freshFarmMaterialTypePool();
+    RARITY_ORDER.forEach(g=>{ target[typeKey][g] = (target[typeKey][g]||0) + (source[typeKey][g]||0); });
+  });
+}
+async function depositGold(amount){
+  const amt = Math.floor(Math.max(0, amount));
+  if(amt<=0 || amt>(state.gold||0)){ showToast('보유한 골드보다 많이 예치할 수 없습니다', true); return; }
+  state.gold -= amt; warehouse.gold = (warehouse.gold||0) + amt;
+  await saveWarehouse(); scheduleSave(); showWarehouseModal(); renderAll();
+  showToast(`골드 ${amt.toLocaleString()}을(를) 창고에 예치했습니다`);
+}
+async function withdrawGold(amount){
+  const amt = Math.floor(Math.max(0, amount));
+  if(amt<=0 || amt>(warehouse.gold||0)){ showToast('창고에 보관된 골드보다 많이 인출할 수 없습니다', true); return; }
+  warehouse.gold -= amt; state.gold += amt;
+  await saveWarehouse(); scheduleSave(); showWarehouseModal(); renderAll();
+  showToast(`골드 ${amt.toLocaleString()}을(를) 창고에서 인출했습니다`);
+}
+async function depositGems(amount){
+  const amt = Math.floor(Math.max(0, amount));
+  if(amt<=0 || amt>(state.gems||0)){ showToast('보유한 보석보다 많이 예치할 수 없습니다', true); return; }
+  state.gems -= amt; warehouse.gems = (warehouse.gems||0) + amt;
+  await saveWarehouse(); scheduleSave(); showWarehouseModal(); renderAll();
+  showToast(`보석 ${amt.toLocaleString()}을(를) 창고에 예치했습니다`);
+}
+async function withdrawGems(amount){
+  const amt = Math.floor(Math.max(0, amount));
+  if(amt<=0 || amt>(warehouse.gems||0)){ showToast('창고에 보관된 보석보다 많이 인출할 수 없습니다', true); return; }
+  warehouse.gems -= amt; state.gems += amt;
+  await saveWarehouse(); scheduleSave(); showWarehouseModal(); renderAll();
+  showToast(`보석 ${amt.toLocaleString()}을(를) 창고에서 인출했습니다`);
+}
+async function depositItemToWarehouse(itemId){
+  const idx = state.inventory.findIndex(i=>i.id===itemId);
+  if(idx===-1) return;
+  const item = state.inventory[idx];
+  if(item.kind){ showToast('장비만 창고에 넣을 수 있습니다', true); return; }
+  state.inventory.splice(idx,1);
+  warehouse.items.push(item);
+  await saveWarehouse(); scheduleSave(); showWarehouseModal(); renderAll();
+  showToast(`${item.name}을(를) 창고에 예치했습니다`);
+}
+async function withdrawItemFromWarehouse(itemId){
+  const idx = warehouse.items.findIndex(i=>i.id===itemId);
+  if(idx===-1) return;
+  const item = warehouse.items[idx];
+  warehouse.items.splice(idx,1);
+  state.inventory.push(item);
+  await saveWarehouse(); scheduleSave(); showWarehouseModal(); renderAll();
+  showToast(`${item.name}을(를) 창고에서 인출했습니다`);
+}
+async function depositJewelToWarehouse(jewelId){
+  const m = state.mining;
+  if(m.equippedJewels && m.equippedJewels.includes(jewelId)){ showToast('장착 중인 보석은 창고에 넣을 수 없습니다', true); return; }
+  const idx = m.jewels.findIndex(j=>j.id===jewelId);
+  if(idx===-1) return;
+  const jewel = m.jewels[idx];
+  m.jewels.splice(idx,1);
+  warehouse.jewels.push(jewel);
+  await saveWarehouse(); scheduleSave(); showWarehouseModal(); renderAll();
+  showToast(`${jewel.name}을(를) 창고에 예치했습니다`);
+}
+async function withdrawJewelFromWarehouse(jewelId){
+  const idx = warehouse.jewels.findIndex(j=>j.id===jewelId);
+  if(idx===-1) return;
+  const jewel = warehouse.jewels[idx];
+  warehouse.jewels.splice(idx,1);
+  state.mining.jewels.push(jewel);
+  await saveWarehouse(); scheduleSave(); showWarehouseModal(); renderAll();
+  showToast(`${jewel.name}을(를) 창고에서 인출했습니다`);
+}
+async function depositFarmPool(typeKey){
+  const src = state.farm.materials[typeKey];
+  const total = sumFarmMaterialPool(src);
+  if(total<=0){ showToast('예치할 재료가 없습니다', true); return; }
+  mergeFarmMaterialPoolInto(warehouse.farmMaterials[typeKey], src);
+  state.farm.materials[typeKey] = (typeKey==='wood') ? freshFarmMaterialsWood() : freshFarmMaterialsSeed();
+  await saveWarehouse(); scheduleSave(); showWarehouseModal(); renderAll();
+  showToast(`${typeKey==='wood'?'나무':'씨앗'} 전체를 창고에 예치했습니다`);
+}
+async function withdrawFarmPool(typeKey){
+  const src = warehouse.farmMaterials[typeKey];
+  const total = sumFarmMaterialPool(src);
+  if(total<=0){ showToast('창고에 보관된 재료가 없습니다', true); return; }
+  mergeFarmMaterialPoolInto(state.farm.materials[typeKey], src);
+  warehouse.farmMaterials[typeKey] = (typeKey==='wood') ? freshFarmMaterialsWood() : freshFarmMaterialsSeed();
+  await saveWarehouse(); scheduleSave(); showWarehouseModal(); renderAll();
+  showToast(`${typeKey==='wood'?'나무':'씨앗'} 전체를 창고에서 인출했습니다`);
+}
+async function depositFarmFlat(key){
+  const amt = state.farm.materials[key]||0;
+  if(amt<=0){ showToast('예치할 재료가 없습니다', true); return; }
+  warehouse.farmMaterials[key] = (warehouse.farmMaterials[key]||0) + amt;
+  state.farm.materials[key] = 0;
+  await saveWarehouse(); scheduleSave(); showWarehouseModal(); renderAll();
+  showToast(`${key==='brick'?'벽돌':'물'} 전체를 창고에 예치했습니다`);
+}
+async function withdrawFarmFlat(key){
+  const amt = warehouse.farmMaterials[key]||0;
+  if(amt<=0){ showToast('창고에 보관된 재료가 없습니다', true); return; }
+  state.farm.materials[key] = (state.farm.materials[key]||0) + amt;
+  warehouse.farmMaterials[key] = 0;
+  await saveWarehouse(); scheduleSave(); showWarehouseModal(); renderAll();
+  showToast(`${key==='brick'?'벽돌':'물'} 전체를 창고에서 인출했습니다`);
+}
+function warehouseItemRowHtml(item, side){
+  const r = rarityOf(item);
+  const btnLabel = side==='inv' ? '예치 →' : '← 인출';
+  const action = side==='inv' ? `data-wh-deposit-item="${item.id}"` : `data-wh-withdraw-item="${item.id}"`;
+  return `<div class="wh-row" style="display:flex;align-items:center;justify-content:space-between;gap:6px;padding:6px 8px;border-bottom:1px solid var(--border-soft);">
+    <div style="font-size:11.5px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"><span class="rarity-tag ${r.cls}" style="margin-right:4px;">${r.label}</span>${escapeHtml(item.name)}${item.enhanceLevel?' +'+item.enhanceLevel:''}</div>
+    <button class="btn btn-secondary" style="flex-shrink:0;font-size:10.5px;padding:4px 8px;" ${action}>${btnLabel}</button>
+  </div>`;
+}
+function warehouseJewelRowHtml(jewel, side){
+  const r = RARITY_BY_KEY[jewel.rarityKey]||RARITIES[0];
+  const btnLabel = side==='inv' ? '예치 →' : '← 인출';
+  const action = side==='inv' ? `data-wh-deposit-jewel="${jewel.id}"` : `data-wh-withdraw-jewel="${jewel.id}"`;
+  return `<div class="wh-row" style="display:flex;align-items:center;justify-content:space-between;gap:6px;padding:6px 8px;border-bottom:1px solid var(--border-soft);">
+    <div style="font-size:11.5px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"><span class="rarity-tag ${r.cls}" style="margin-right:4px;">${r.label}</span>${escapeHtml(jewel.name)}</div>
+    <button class="btn btn-secondary" style="flex-shrink:0;font-size:10.5px;padding:4px 8px;" ${action}>${btnLabel}</button>
+  </div>`;
+}
+function showWarehouseModal(){
+  const existing = document.getElementById('warehouseModal');
+  if(existing) existing.remove();
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.id = 'warehouseModal';
+  const invEquip = state.inventory.filter(i=>!i.kind);
+  const tabs = [
+    { key:'currency', label:'재화' },
+    { key:'equip', label:'장비' },
+    { key:'jewel', label:'젬스톤' },
+    { key:'farm', label:'농장자재' }
+  ];
+  let bodyHtml = '';
+  if(warehouseSubTab==='currency'){
+    bodyHtml = `
+      <div class="wh-currency-box" style="display:flex;flex-direction:column;gap:10px;">
+        <div style="background:var(--bg-inset);border:1px solid var(--border-soft);border-radius:10px;padding:10px 12px;">
+          <div style="font-size:11px;color:var(--text-dim);margin-bottom:6px;">골드 · 보유 ${(state.gold||0).toLocaleString()} · 창고 ${(warehouse.gold||0).toLocaleString()}</div>
+          <div style="display:flex;gap:6px;">
+            <input type="number" id="whGoldInput" placeholder="수량" style="flex:1;min-width:0;background:var(--bg-panel);border:1px solid var(--border-soft);border-radius:8px;padding:7px 8px;color:var(--text);font-size:12px;">
+            <button class="btn btn-primary" id="whGoldDepositBtn" style="flex-shrink:0;">예치</button>
+            <button class="btn btn-secondary" id="whGoldWithdrawBtn" style="flex-shrink:0;">인출</button>
+          </div>
+        </div>
+        <div style="background:var(--bg-inset);border:1px solid var(--border-soft);border-radius:10px;padding:10px 12px;">
+          <div style="font-size:11px;color:var(--text-dim);margin-bottom:6px;">보석 · 보유 ${(state.gems||0).toLocaleString()} · 창고 ${(warehouse.gems||0).toLocaleString()}</div>
+          <div style="display:flex;gap:6px;">
+            <input type="number" id="whGemInput" placeholder="수량" style="flex:1;min-width:0;background:var(--bg-panel);border:1px solid var(--border-soft);border-radius:8px;padding:7px 8px;color:var(--text);font-size:12px;">
+            <button class="btn btn-primary" id="whGemDepositBtn" style="flex-shrink:0;">예치</button>
+            <button class="btn btn-secondary" id="whGemWithdrawBtn" style="flex-shrink:0;">인출</button>
+          </div>
+        </div>
+      </div>`;
+  } else if(warehouseSubTab==='equip'){
+    bodyHtml = `
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+        <div>
+          <div class="detail-section-label" style="justify-content:flex-start;">내 인벤토리 (${invEquip.length})</div>
+          <div style="max-height:280px;overflow-y:auto;border:1px solid var(--border-soft);border-radius:8px;">${invEquip.length ? invEquip.map(i=>warehouseItemRowHtml(i,'inv')).join('') : '<div style="padding:12px;font-size:11px;color:var(--text-dim);text-align:center;">없음</div>'}</div>
+        </div>
+        <div>
+          <div class="detail-section-label" style="justify-content:flex-start;">창고 보관함 (${warehouse.items.length})</div>
+          <div style="max-height:280px;overflow-y:auto;border:1px solid var(--border-soft);border-radius:8px;">${warehouse.items.length ? warehouse.items.map(i=>warehouseItemRowHtml(i,'wh')).join('') : '<div style="padding:12px;font-size:11px;color:var(--text-dim);text-align:center;">없음</div>'}</div>
+        </div>
+      </div>`;
+  } else if(warehouseSubTab==='jewel'){
+    const invJewels = state.mining.jewels||[];
+    bodyHtml = `
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+        <div>
+          <div class="detail-section-label" style="justify-content:flex-start;">내 보석함 (${invJewels.length})</div>
+          <div style="max-height:280px;overflow-y:auto;border:1px solid var(--border-soft);border-radius:8px;">${invJewels.length ? invJewels.map(j=>warehouseJewelRowHtml(j,'inv')).join('') : '<div style="padding:12px;font-size:11px;color:var(--text-dim);text-align:center;">없음</div>'}</div>
+        </div>
+        <div>
+          <div class="detail-section-label" style="justify-content:flex-start;">창고 보관함 (${warehouse.jewels.length})</div>
+          <div style="max-height:280px;overflow-y:auto;border:1px solid var(--border-soft);border-radius:8px;">${warehouse.jewels.length ? warehouse.jewels.map(j=>warehouseJewelRowHtml(j,'wh')).join('') : '<div style="padding:12px;font-size:11px;color:var(--text-dim);text-align:center;">없음</div>'}</div>
+        </div>
+      </div>
+      <div style="font-size:9.5px;color:var(--text-dim);margin-top:6px;">장착 중인 보석은 먼저 해제해야 창고에 넣을 수 있습니다.</div>`;
+  } else if(warehouseSubTab==='farm'){
+    const mySeed = sumFarmMaterialPool(state.farm.materials.seed);
+    const myWood = sumFarmMaterialPool(state.farm.materials.wood);
+    const whSeed = sumFarmMaterialPool(warehouse.farmMaterials.seed);
+    const whWood = sumFarmMaterialPool(warehouse.farmMaterials.wood);
+    const row = (label, mine, wh, depositAttr, withdrawAttr)=> `
+      <div style="background:var(--bg-inset);border:1px solid var(--border-soft);border-radius:10px;padding:10px 12px;margin-bottom:8px;">
+        <div style="font-size:11px;color:var(--text-dim);margin-bottom:6px;">${label} · 보유 ${mine.toLocaleString()}개 · 창고 ${wh.toLocaleString()}개</div>
+        <div style="display:flex;gap:6px;">
+          <button class="btn btn-primary" style="flex:1;" ${depositAttr}>전체 예치</button>
+          <button class="btn btn-secondary" style="flex:1;" ${withdrawAttr}>전체 인출</button>
+        </div>
+      </div>`;
+    bodyHtml = row('씨앗', mySeed, whSeed, 'data-wh-deposit-farm="seed"', 'data-wh-withdraw-farm="seed"')
+      + row('나무', myWood, whWood, 'data-wh-deposit-farm="wood"', 'data-wh-withdraw-farm="wood"')
+      + row('벽돌', state.farm.materials.brick||0, warehouse.farmMaterials.brick||0, 'data-wh-deposit-farm-flat="brick"', 'data-wh-withdraw-farm-flat="brick"')
+      + row('물', state.farm.materials.water||0, warehouse.farmMaterials.water||0, 'data-wh-deposit-farm-flat="water"', 'data-wh-withdraw-farm-flat="water"');
+  }
+  overlay.innerHTML = `
+    <div class="modal-box" style="max-width:480px;">
+      <div class="detail-head" style="margin-bottom:0;">
+        <div class="title" style="margin-bottom:4px;">창고</div>
+        <button class="detail-close" id="warehouseCloseBtn">&times;</button>
+      </div>
+      <div class="modal-desc">모든 캐릭터가 공유하는 보관함입니다. 여기 넣은 재화/아이템은 다른 캐릭터로 접속해도 그대로 있습니다.</div>
+      <div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap;">
+        ${tabs.map(t=>`<button class="btn ${warehouseSubTab===t.key?'btn-primary':'btn-secondary'}" style="flex:1;font-size:11.5px;padding:7px 6px;" data-wh-tab="${t.key}">${t.label}</button>`).join('')}
+      </div>
+      <div style="margin-top:10px;">${bodyHtml}</div>
+    </div>`;
+  document.body.appendChild(overlay);
+  overlay.addEventListener('click', (e)=>{ if(e.target===overlay) overlay.remove(); });
+  const closeBtn = document.getElementById('warehouseCloseBtn');
+  if(closeBtn) closeBtn.addEventListener('click', ()=> overlay.remove());
+  overlay.querySelectorAll('button[data-wh-tab]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{ warehouseSubTab = btn.dataset.whTab; showWarehouseModal(); });
+  });
+  const goldInput = document.getElementById('whGoldInput');
+  const goldDepositBtn = document.getElementById('whGoldDepositBtn');
+  if(goldDepositBtn) goldDepositBtn.addEventListener('click', ()=> depositGold(Number(goldInput.value)||0));
+  const goldWithdrawBtn = document.getElementById('whGoldWithdrawBtn');
+  if(goldWithdrawBtn) goldWithdrawBtn.addEventListener('click', ()=> withdrawGold(Number(goldInput.value)||0));
+  const gemInput = document.getElementById('whGemInput');
+  const gemDepositBtn = document.getElementById('whGemDepositBtn');
+  if(gemDepositBtn) gemDepositBtn.addEventListener('click', ()=> depositGems(Number(gemInput.value)||0));
+  const gemWithdrawBtn = document.getElementById('whGemWithdrawBtn');
+  if(gemWithdrawBtn) gemWithdrawBtn.addEventListener('click', ()=> withdrawGems(Number(gemInput.value)||0));
+  overlay.querySelectorAll('button[data-wh-deposit-item]').forEach(btn=> btn.addEventListener('click', ()=> depositItemToWarehouse(btn.dataset.whDepositItem)));
+  overlay.querySelectorAll('button[data-wh-withdraw-item]').forEach(btn=> btn.addEventListener('click', ()=> withdrawItemFromWarehouse(btn.dataset.whWithdrawItem)));
+  overlay.querySelectorAll('button[data-wh-deposit-jewel]').forEach(btn=> btn.addEventListener('click', ()=> depositJewelToWarehouse(btn.dataset.whDepositJewel)));
+  overlay.querySelectorAll('button[data-wh-withdraw-jewel]').forEach(btn=> btn.addEventListener('click', ()=> withdrawJewelFromWarehouse(btn.dataset.whWithdrawJewel)));
+  overlay.querySelectorAll('button[data-wh-deposit-farm]').forEach(btn=> btn.addEventListener('click', ()=> depositFarmPool(btn.dataset.whDepositFarm)));
+  overlay.querySelectorAll('button[data-wh-withdraw-farm]').forEach(btn=> btn.addEventListener('click', ()=> withdrawFarmPool(btn.dataset.whWithdrawFarm)));
+  overlay.querySelectorAll('button[data-wh-deposit-farm-flat]').forEach(btn=> btn.addEventListener('click', ()=> depositFarmFlat(btn.dataset.whDepositFarmFlat)));
+  overlay.querySelectorAll('button[data-wh-withdraw-farm-flat]').forEach(btn=> btn.addEventListener('click', ()=> withdrawFarmFlat(btn.dataset.whWithdrawFarmFlat)));
+}
 
 /* =============================================================
    INIT
    ============================================================= */
 async function initGame(){
   renderAll();
+  await loadWarehouse();
   if(hasStorage){
     await showSlotSelect();
   } else {

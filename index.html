@@ -8720,18 +8720,21 @@ function runTowerFloor(){
   let i = 0;
   let prevEnHp = enemy.hp, prevMyHp = towerRun.hp;
   const comboState = { streak: 0 };
-  // [버그 수정] 로그 재생 간격이 고정 90ms라서, 로그 항목이 많은 전투는 실제 제한시간(5초)이 이미 지나
-  // 승패가 결정된 뒤에도 화면상 애니메이션만 한참 더 재생되어 "5초가 지나도 안 끝나는 것처럼" 보였다.
-  // 로그 개수에 맞춰 간격을 동적으로 줄여서, 전체 재생 시간이 제한시간을 크게 넘지 않도록 한다.
-  // [되돌림] 한때 상한을 제한시간 전체(5000ms)까지 늘려봤는데, 그러면 전투가 한두 턴 만에(순식간에)
-  // 끝나는 경우(예: 펫 선제공격 한 방에 즉사) 오히려 실제로는 끝난 전투를 억지로 5초 내내 붙잡아두면서
-  // "잡고 나서 한참 뒤에야 다음 층으로 넘어가고, 그동안 남은시간 표시는 그대로 멈춰있는" 것처럼 보이는
-  // 더 나쁜 문제가 생겼다. 전투가 빨리 끝나면 화면도 빨리 넘어가는 게 맞으므로 상한을 다시 90ms로 되돌린다.
-  const stepDelay = clamp(Math.floor((TOWER_TIME_LIMIT_SEC*1000) / Math.max(1, result.log.length)), 20, 90);
+  // [버그 수정 - 근본 원인] 캐릭터의 공격속도가 여러 시스템(스킬/장비/축복 등)으로 계속 누적되면서,
+  // 5초라는 짧은 제한시간 안에도 공격 횟수(=로그 항목 수)가 수백~수천 개까지 쌓일 수 있게 됐다.
+  // 항목마다 20~90ms의 고정 간격으로 재생하면, 항목이 아주 많을 때는 그 합계가 5초를 훨씬 넘어버려서
+  // "몬스터를 잡은(승패가 이미 결정된) 후에도 한참 뒤에야 다음 층으로 넘어가고, 그동안 남은시간 표시도
+  // (초반 항목들의 시간차가 너무 촘촘해) 거의 안 줄어드는 것처럼" 보이는 문제가 있었다.
+  // 재생할 항목 수 자체를 일정 개수로 제한(건너뛰기)해서, 로그가 아무리 많아도 전체 재생 시간이
+  // 항상 일정 범위 안에 들어오도록 한다.
+  const MAX_ANIM_STEPS = 60;
+  const stepInc = Math.max(1, Math.ceil(result.log.length / MAX_ANIM_STEPS));
+  const totalSteps = Math.ceil(result.log.length / stepInc);
+  const stepDelay = clamp(Math.floor((TOWER_TIME_LIMIT_SEC*1000) / Math.max(1, totalSteps)), 40, 90);
   function step(){
     if(!towerRun){ return; }
     if(i >= result.log.length){ finishTowerFloor(result, enemy, timedOut); return; }
-    const entry = result.log[i];
+    const entry = result.log[Math.min(i, result.log.length-1)];
     if(els.log){ const l=document.createElement('div'); l.className=entry.cls; l.textContent=entry.text; els.log.appendChild(l); els.log.scrollTop=els.log.scrollHeight; }
     playBattleAnim(towerPanelEl, entry.cls, entry.enHp < prevEnHp, entry.myHp < prevMyHp, comboState);
     renderStatusIcons('towerMyStatus', 'towerEnStatus', entry);
@@ -8748,7 +8751,7 @@ function runTowerFloor(){
       timeLeftEl.textContent = `${remain.toFixed(1)}초`;
       timeLeftEl.style.color = remain <= 1 ? 'var(--danger)' : 'var(--gold)';
     }
-    i++; setTimeout(step, stepDelay);
+    i += stepInc; setTimeout(step, stepDelay);
   }
   step();
 }
@@ -9058,15 +9061,18 @@ function runTowerHardFloor(){
   let i = 0;
   let prevEnHp = enemy.hp, prevMyHp = towerHardRun.hp;
   const comboState = { streak: 0 };
-  // [버그 수정] 일반 모드와 동일하게, 로그 개수에 맞춰 재생 간격을 동적으로 줄여 전체 재생 시간이
-  // 제한시간을 크게 넘지 않도록 한다.
-  // [되돌림] 상한을 제한시간 전체(5000ms)로 늘렸더니, 펫 선제공격 한 방에 즉사시키는 등 한두 턴 만에
-  // 끝나는 전투에서 오히려 이미 끝난 전투를 억지로 5초 내내 붙잡아두는 문제가 생겨 90ms로 되돌린다.
-  const stepDelay = clamp(Math.floor((TOWER_TIME_LIMIT_SEC*1000) / Math.max(1, result.log.length)), 20, 90);
+  // [버그 수정 - 근본 원인] 일반 모드와 동일하게, 공격속도가 여러 시스템으로 누적되면서 5초의 제한시간
+  // 안에도 로그 항목이 수백~수천 개까지 쌓일 수 있어 고정 간격 재생으로는 실제 재생 시간이 5초를 크게
+  // 넘어버렸다("잡고 나서 한참 뒤에야 다음 층", "남은시간이 안 줄어드는 것처럼 보임"). 재생할 항목 수를
+  // 일정 개수로 제한(건너뛰기)해서 전체 재생 시간이 항상 일정 범위 안에 들어오도록 한다.
+  const MAX_ANIM_STEPS = 60;
+  const stepInc = Math.max(1, Math.ceil(result.log.length / MAX_ANIM_STEPS));
+  const totalSteps = Math.ceil(result.log.length / stepInc);
+  const stepDelay = clamp(Math.floor((TOWER_TIME_LIMIT_SEC*1000) / Math.max(1, totalSteps)), 40, 90);
   function step(){
     if(!towerHardRun){ return; }
     if(i >= result.log.length){ finishTowerHardFloor(result, enemy, timedOut); return; }
-    const entry = result.log[i];
+    const entry = result.log[Math.min(i, result.log.length-1)];
     if(els.log){ const l=document.createElement('div'); l.className=entry.cls; l.textContent=entry.text; els.log.appendChild(l); els.log.scrollTop=els.log.scrollHeight; }
     playBattleAnim(towerPanelEl, entry.cls, entry.enHp < prevEnHp, entry.myHp < prevMyHp, comboState);
     renderStatusIcons('towerHardMyStatus', 'towerHardEnStatus', entry);
@@ -9082,7 +9088,7 @@ function runTowerHardFloor(){
       timeLeftEl.textContent = `${remain.toFixed(1)}초`;
       timeLeftEl.style.color = remain <= 1 ? 'var(--danger)' : '#c9484f';
     }
-    i++; setTimeout(step, stepDelay);
+    i += stepInc; setTimeout(step, stepDelay);
   }
   step();
 }

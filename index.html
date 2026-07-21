@@ -12997,15 +12997,15 @@ function grantKillReward(monster, mult){
   const expGain = Math.round((monster.level*15 + randInt(0,10)) * (1+hunt.playerStats.expFindPct/100) * mult * specialExpMult * currentExpCouponMult());
   rollExp4xFragmentDrop();
   let gemGain = 0; if(Math.random()<0.3) gemGain = Math.round(randInt(20,60) * (1+(hunt.playerStats.gemFindPct||0)/100));
-  let itemDrop = null; if(mult>=1 && Math.random()<0.06*specialDropMult) itemDrop = generateItem(null, bias, state.job, monster.level); // [밸런스 조정] 드롭률 9% -> 6%로 하향
+  let itemDrop = null; if(Math.random()<0.06*specialDropMult) itemDrop = generateItem(null, bias, state.job, monster.level); // [밸런스 조정] 드롭률 9% -> 6%로 하향
   // [신규] 젬스톤: 5차 스킬 전용 강화(gemEnhanceSkill)에 사용되는 재료. 몬스터 처치 시 낮은 확률로 드롭.
-  if(mult>=1 && Math.random()<0.04){
+  if(Math.random()<0.04){
     const gemGainAmt = randInt(1,2);
     state.gemstones = (state.gemstones||0) + gemGainAmt;
     hunt.totals.gemstones = (hunt.totals.gemstones||0) + gemGainAmt;
   }
   // [신규] 농장/사육장 재료: 몬스터 처치 시 낮은 확률로 나무/벽돌/씨앗/물/동물 주문서를 드롭한다.
-  if(mult>=1){
+  if(true){ // [버그 수정] 예전에는 mult>=1(캐릭터보다 레벨이 같거나 높은 몬스터)일 때만 드롭이 발동해, 레벨이 조금이라도 낮은 몬스터를 잡으면 장비/재료가 전혀 안 나오던 문제가 있었다
     if(Math.random()<0.05){
       const woodType = pick(FARM_WOOD_TYPES), qty = randInt(1,3);
       const dropRarityKey = rollRarity(bias*0.5).key; // [신규] 나무 드롭에도 등급 부여 (던전 난이도가 높을수록 고등급 확률 소폭 상승)
@@ -13048,18 +13048,18 @@ function grantKillReward(monster, mult){
   state.materials[matRarity.key] += matQty;
   if(itemDrop) state.inventory.push(itemDrop);
   const monPotKeys = monsterPotionTierFor(monster.level);
-  if(mult>=1 && Math.random()<0.15) state.potions[monPotKeys.hp] += 1;
-  if(mult>=1 && Math.random()<0.10) state.potions[monPotKeys.mana] += 1;
-  if(mult>=1 && Math.random()<0.03){ const spKey = pick(Object.keys(STAT_POTIONS)); state.potions[spKey] += 1; }
-  if(mult>=1 && Math.random()<0.023){ const scroll = generateScroll(pick(NORMAL_SCROLL_TIER_KEYS)); state.inventory.push(scroll); hunt.itemsGained.push(scroll); }
-  if(mult>=1 && Math.random()<0.023){ const rune = generateRune(bias); state.inventory.push(rune); hunt.itemsGained.push(rune); }
-  if(mult>=1 && Math.random()<0.015){ const stone = generateEffectStone(bias); state.inventory.push(stone); hunt.itemsGained.push(stone); }
-  if(mult>=1 && Math.random()<0.04){ const beGain = randInt(1,3); state.mining.boostEnergy += beGain; hunt.totals.boostEnergy = (hunt.totals.boostEnergy||0) + beGain; }
+  if(Math.random()<0.15) state.potions[monPotKeys.hp] += 1;
+  if(Math.random()<0.10) state.potions[monPotKeys.mana] += 1;
+  if(Math.random()<0.03){ const spKey = pick(Object.keys(STAT_POTIONS)); state.potions[spKey] += 1; }
+  if(Math.random()<0.023){ const scroll = generateScroll(pick(NORMAL_SCROLL_TIER_KEYS)); state.inventory.push(scroll); hunt.itemsGained.push(scroll); }
+  if(Math.random()<0.023){ const rune = generateRune(bias); state.inventory.push(rune); hunt.itemsGained.push(rune); }
+  if(Math.random()<0.015){ const stone = generateEffectStone(bias); state.inventory.push(stone); hunt.itemsGained.push(stone); }
+  if(Math.random()<0.04){ const beGain = randInt(1,3); state.mining.boostEnergy += beGain; hunt.totals.boostEnergy = (hunt.totals.boostEnergy||0) + beGain; }
   // 몬스터 처치로도 광산 열쇠조각/열쇠를 얻을 수 있게 해서, 탐험으로 쌓인 보물상자를 열 수단이 마련되도록 한다.
-  if(mult>=1 && Math.random()<0.07){ const kfGain = randInt(1,3); state.mining.keyFragments += kfGain; hunt.totals.keyFragments = (hunt.totals.keyFragments||0) + kfGain; }
-  if(mult>=1 && Math.random()<0.015){ state.mining.keys += 1; hunt.totals.keys = (hunt.totals.keys||0) + 1; }
+  if(Math.random()<0.07){ const kfGain = randInt(1,3); state.mining.keyFragments += kfGain; hunt.totals.keyFragments = (hunt.totals.keyFragments||0) + kfGain; }
+  if(Math.random()<0.015){ state.mining.keys += 1; hunt.totals.keys = (hunt.totals.keys||0) + 1; }
   // 정령의 힘(소모 아이템)과 정령 장비도 전투를 통해 획득할 수 있게 한다
-  if(mult>=1 && Math.random()<0.05){
+  if(Math.random()<0.05){
     const spGain = randInt(1,3);
     state.expedition = state.expedition || { essence:{ normal:0, radiant:0, blessed:0 } };
     state.expedition.essence = state.expedition.essence || { normal:0, radiant:0, blessed:0 };
@@ -13067,17 +13067,17 @@ function grantKillReward(monster, mult){
     hunt.totals.spiritPower = (hunt.totals.spiritPower||0) + spGain;
   }
   // [신규] 원정대 - 레이드 티켓 조각: 던전 전투 중 낮은 확률로 드롭 (10개 모으면 티켓 1장으로 교환)
-  if(mult>=1 && Math.random() < RAID_TICKET_FRAGMENT_DROP_CHANCE){ state.expedition.raidTicketFragments += 1; hunt.totals.raidTicketFragments = (hunt.totals.raidTicketFragments||0) + 1; }
+  if(Math.random() <RAID_TICKET_FRAGMENT_DROP_CHANCE){ state.expedition.raidTicketFragments += 1; hunt.totals.raidTicketFragments = (hunt.totals.raidTicketFragments||0) + 1; }
   // [신규] 심볼 조각: 던전 전투 중 아주아주 극악의 확률로 드롭 (심볼 강화 재료)
-  if(mult>=1 && Math.random() < SYMBOL_SHARD_DUNGEON_DROP_CHANCE){
+  if(Math.random() <SYMBOL_SHARD_DUNGEON_DROP_CHANCE){
     if(!state.symbol) state.symbol = { level:0, shards:0 };
     state.symbol.shards = (state.symbol.shards||0) + 1;
     hunt.totals.symbolShards = (hunt.totals.symbolShards||0) + 1;
     showToast('심볼 조각을 발견했습니다! (보유 심볼 조각 +1)');
   }
-  if(mult>=1 && Math.random()<0.02){ const sgear = generateSpiritGear(pick(SPIRIT_GEAR_SLOTS), bias); state.spiritGear.push(sgear); hunt.itemsGained.push(sgear); }
+  if(Math.random()<0.02){ const sgear = generateSpiritGear(pick(SPIRIT_GEAR_SLOTS), bias); state.spiritGear.push(sgear); hunt.itemsGained.push(sgear); }
   // 낚시 미끼: 던전 몬스터 처치 시 낮은 확률로 획득 (등급이 높을수록 훨씬 희귀)
-  if(mult>=1){
+  if(true){ // [버그 수정] 예전에는 mult>=1(캐릭터보다 레벨이 같거나 높은 몬스터)일 때만 드롭이 발동해, 레벨이 조금이라도 낮은 몬스터를 잡으면 장비/재료가 전혀 안 나오던 문제가 있었다
     Object.keys(FISH_BAIT_DROP_CHANCE).forEach(tier=>{
       if(Math.random() < FISH_BAIT_DROP_CHANCE[tier]){
         state.fishing.bait[tier] += 1;

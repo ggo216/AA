@@ -2008,126 +2008,126 @@ function bulkEnhanceTier4Skill(key){
   renderAll();
 }
 const SKILL_DEFS = {
-  ironSkin:   { name:'철갑', kind:'passive', maxLevel:8, unlockLv:1,
+  ironSkin:   { name:'철갑', kind:'passive', maxLevel:15, unlockLv:1,
     desc:'받는 피해를 항상 일정 비율 감소시킵니다.', reduce:(lv)=>0.03*lv,
     effectText:(lv)=> lv===0?'미보유':`피해 감소 ${Math.round(0.03*lv*100)}%` },
-  vitality:   { name:'강인한 육체', kind:'passive', maxLevel:8, unlockLv:1,
+  vitality:   { name:'강인한 육체', kind:'passive', maxLevel:15, unlockLv:1,
     desc:'최대 체력이 영구적으로 증가합니다.', hpPct:(lv)=>0.04*lv,
     effectText:(lv)=> lv===0?'미보유':`최대체력 +${Math.round(0.04*lv*100)}%` },
-  precision:  { name:'정밀한 감각', kind:'passive', maxLevel:8, unlockLv:4,
+  precision:  { name:'정밀한 감각', kind:'passive', maxLevel:15, unlockLv:4,
     desc:'치명타 확률이 영구적으로 증가합니다.', critBonus:(lv)=>0.02*lv,
     effectText:(lv)=> lv===0?'미보유':`치명타 확률 +${Math.round(0.02*lv*100)}%` },
-  swiftness:  { name:'신속', kind:'passive', maxLevel:8, unlockLv:4,
+  swiftness:  { name:'신속', kind:'passive', maxLevel:15, unlockLv:4,
     desc:'공격속도가 영구적으로 증가합니다.', spdPct:(lv)=>0.015*lv, // [밸런스] 공격속도 계수 절반으로 축소
     effectText:(lv)=> lv===0?'미보유':`공격속도 +${Math.round(0.015*lv*100)}%` },
-  regen:      { name:'자연 회복', kind:'passive', maxLevel:8, unlockLv:7,
+  regen:      { name:'자연 회복', kind:'passive', maxLevel:15, unlockLv:7,
     desc:'마나 소모 없이 매 턴 확률로 체력을 소량 회복합니다.',
     chance:(lv)=>0.10+0.03*(lv-1), healPct:(lv)=>0.03+0.01*(lv-1),
     effectText:(lv)=> lv===0?'미보유':`발동확률 ${Math.round((0.10+0.03*(lv-1))*100)}% · 회복량 ${Math.round((0.03+0.01*(lv-1))*100)}%` },
 
-  powerStrike:  { name:'강타', kind:'active', maxLevel:8, unlockLv:1, manaCost:14,
+  powerStrike:  { name:'강타', kind:'active', maxLevel:15, unlockLv:1, manaCost:14,
     desc:'마나를 소모해 공격 시 확률로 추가 피해를 입힙니다.',
     chance:(lv)=>0.15+0.05*(lv-1), mult:(lv)=>0.42+0.13*(lv-1),
     effectText:(lv)=> lv===0?'미보유':`발동확률 ${Math.round((0.15+0.05*(lv-1))*100)}% · 피해 +${Math.round((0.42+0.13*(lv-1))*100)}%` },
-  doubleStrike: { name:'연속 공격', kind:'active', maxLevel:8, unlockLv:5, manaCost:22,
+  doubleStrike: { name:'연속 공격', kind:'active', maxLevel:15, unlockLv:5, manaCost:22,
     desc:'마나를 소모해 공격 시 확률로 한 번 더 공격합니다.',
     chance:(lv)=>0.10+0.04*(lv-1),
     effectText:(lv)=> lv===0?'미보유':`발동확률 ${Math.round((0.10+0.04*(lv-1))*100)}%` },
-  counter:      { name:'반격', kind:'active', maxLevel:8, unlockLv:8, manaCost:17,
+  counter:      { name:'반격', kind:'active', maxLevel:15, unlockLv:8, manaCost:17,
     desc:'마나를 소모해 피격 시 확률로 즉시 반격합니다.',
     chance:(lv)=>0.12+0.05*(lv-1), mult:(lv)=>0.34+0.08*(lv-1),
     effectText:(lv)=> lv===0?'미보유':`발동확률 ${Math.round((0.12+0.05*(lv-1))*100)}% · 반격피해 ATK의 ${Math.round((0.34+0.08*(lv-1))*100)}%` },
-  heal:         { name:'회복 마법', kind:'active', maxLevel:8, unlockLv:10, manaCost:28,
+  heal:         { name:'회복 마법', kind:'active', maxLevel:15, unlockLv:10, manaCost:28,
     desc:'마나를 소모해 확률로 체력을 크게 회복합니다.',
     chance:(lv)=>0.20+0.05*(lv-1), healPct:(lv)=>0.10+0.03*(lv-1),
     effectText:(lv)=> lv===0?'미보유':`발동확률 ${Math.round((0.20+0.05*(lv-1))*100)}% · 회복량 ${Math.round((0.10+0.03*(lv-1))*100)}%` },
 
-  battleCry:    { name:'전투의 함성', kind:'active', job:'warrior', maxLevel:8, unlockLv:12, manaCost:35,
+  battleCry:    { name:'전투의 함성', kind:'active', job:'warrior', maxLevel:15, unlockLv:12, manaCost:35,
     buffType:'buff', cooldown:6, buffDuration:60,
     desc:'[전사] 마나를 소모해 일정 시간 공격력을 크게 올립니다. 지속시간이 끝나면 재사용해야 합니다.',
     buffMult:(lv)=>0.13+0.06*(lv-1),
     effectText:(lv)=> lv===0?'미보유':`쿨타임 6턴 · 지속 60초 · 공격력 +${Math.round((0.13+0.06*(lv-1))*100)}%` },
-  undyingWill:  { name:'불굴의 의지', kind:'passive', job:'warrior', maxLevel:8, unlockLv:18,
+  undyingWill:  { name:'불굴의 의지', kind:'passive', job:'warrior', maxLevel:15, unlockLv:18,
     desc:'[전사] 전투당 1회, 체력이 0이 되어도 확률로 1의 체력으로 생존합니다.',
     chance:(lv)=>0.3+0.15*(lv-1),
     effectText:(lv)=> lv===0?'미보유':`생존확률 ${Math.round((0.3+0.15*(lv-1))*100)}%` },
-  executeStrike:{ name:'필살의 일격', kind:'active', job:'warrior', maxLevel:8, unlockLv:25, manaCost:48,
+  executeStrike:{ name:'필살의 일격', kind:'active', job:'warrior', maxLevel:15, unlockLv:25, manaCost:48,
     cooldown:5, dmgType:'physical',
     desc:'[전사] 마나를 소모해 적 체력이 낮을수록 강력한 처형 피해를 입힙니다.',
     base:(lv)=>0.5+0.17*(lv-1),
     effectText:(lv)=> lv===0?'미보유':`쿨타임 5턴 · 기본피해 ATK의 ${Math.round((0.5+0.17*(lv-1))*100)}%+` },
 
-  multiShot:    { name:'연사', kind:'active', job:'archer', maxLevel:8, unlockLv:12, manaCost:25,
+  multiShot:    { name:'연사', kind:'active', job:'archer', maxLevel:15, unlockLv:12, manaCost:25,
     cooldown:3, dmgType:'physical',
     desc:'[궁수] 마나를 소모해 강력한 추가 사격을 가합니다.',
     mult:(lv)=>0.5+0.13*(lv-1),
     effectText:(lv)=> lv===0?'미보유':`쿨타임 3턴 · 피해 ATK의 ${Math.round((0.5+0.13*(lv-1))*100)}%` },
-  hawkEye:      { name:'매의 눈', kind:'passive', job:'archer', maxLevel:8, unlockLv:18,
+  hawkEye:      { name:'매의 눈', kind:'passive', job:'archer', maxLevel:15, unlockLv:18,
     desc:'[궁수] 치명타 확률과 치명타 피해가 영구적으로 증가합니다.',
     critBonus:(lv)=>0.03*lv, critDmgBonus:(lv)=>0.05*lv,
     effectText:(lv)=> lv===0?'미보유':`치명타확률 +${Math.round(0.03*lv*100)}% · 치명타피해 +${Math.round(0.05*lv*100)}%` },
-  piercingShot: { name:'관통 사격', kind:'active', job:'archer', maxLevel:8, unlockLv:25, manaCost:28,
+  piercingShot: { name:'관통 사격', kind:'active', job:'archer', maxLevel:15, unlockLv:25, manaCost:28,
     cooldown:4, dmgType:'physical',
     desc:'[궁수] 마나를 소모해 방어력을 일부 무시하는 사격을 가합니다.',
     ignoreDefPct:(lv)=>0.5+0.15*(lv-1),
     effectText:(lv)=> lv===0?'미보유':`쿨타임 4턴 · 방어무시 ${Math.round((0.5+0.15*(lv-1))*100)}%` },
 
-  fireball:     { name:'화염구', kind:'active', job:'mage', maxLevel:8, unlockLv:12, manaCost:38,
+  fireball:     { name:'화염구', kind:'active', job:'mage', maxLevel:15, unlockLv:12, manaCost:38,
     cooldown:4, dmgType:'magic',
     desc:'[마법사] 마나를 소모해 강력한 마법 피해를 입힙니다.',
     mult:(lv)=>0.68+0.25*(lv-1),
     effectText:(lv)=> lv===0?'미보유':`쿨타임 4턴 · 피해 ATK의 ${Math.round((0.68+0.25*(lv-1))*100)}%` },
-  manaFlow:     { name:'마나 순환', kind:'passive', job:'mage', maxLevel:8, unlockLv:18,
+  manaFlow:     { name:'마나 순환', kind:'passive', job:'mage', maxLevel:15, unlockLv:18,
     desc:'[마법사] 매 턴 마나를 추가로 회복합니다.',
     manaPerTurn:(lv)=>3+2*lv,
     effectText:(lv)=> lv===0?'미보유':`턴당 마나 +${3+2*lv}` },
-  meteor:       { name:'메테오', kind:'active', job:'mage', maxLevel:8, unlockLv:25, manaCost:60,
+  meteor:       { name:'메테오', kind:'active', job:'mage', maxLevel:15, unlockLv:25, manaCost:60,
     cooldown:6, dmgType:'magic',
     desc:'[마법사] 마나를 소모해 지능에 비례하는 거대한 마법 피해를 입힙니다.',
     mult:(lv)=>1.28+0.42*(lv-1),
     effectText:(lv)=> lv===0?'미보유':`쿨타임 6턴 · 피해 ATK의 ${Math.round((1.28+0.42*(lv-1))*100)}%` },
 
-  assassinate:  { name:'암살', kind:'active', job:'rogue', maxLevel:8, unlockLv:12, manaCost:30,
+  assassinate:  { name:'암살', kind:'active', job:'rogue', maxLevel:15, unlockLv:12, manaCost:30,
     cooldown:4, dmgType:'physical',
     desc:'[도적] 적의 체력이 낮을수록 더 강력한 피해를 입힙니다.',
     base:(lv)=>0.34+0.13*(lv-1),
     effectText:(lv)=> lv===0?'미보유':`쿨타임 4턴 · 기본피해 ATK의 ${Math.round((0.34+0.13*(lv-1))*100)}%+` },
-  stealth:      { name:'은신', kind:'passive', job:'rogue', maxLevel:8, unlockLv:18,
+  stealth:      { name:'은신', kind:'passive', job:'rogue', maxLevel:15, unlockLv:18,
     desc:'[도적] 적의 공격을 확률로 완전히 회피합니다.',
     dodgeChance:(lv)=>0.08+0.04*(lv-1),
     effectText:(lv)=> lv===0?'미보유':`회피확률 ${Math.round((0.08+0.04*(lv-1))*100)}%` },
-  venomStrike:  { name:'맹독 강타', kind:'active', job:'rogue', maxLevel:8, unlockLv:25, manaCost:34,
+  venomStrike:  { name:'맹독 강타', kind:'active', job:'rogue', maxLevel:15, unlockLv:25, manaCost:34,
     cooldown:5, dmgType:'physical',
     desc:'[도적] 마나를 소모해 적에게 맹독을 걸어 몇 턴간 지속 피해를 입힙니다.',
     tickPct:(lv)=>0.08+0.02*(lv-1), turns:4,
     effectText:(lv)=> lv===0?'미보유':`쿨타임 5턴 · 턴당 피해 ATK의 ${Math.round((0.08+0.02*(lv-1))*100)}% (4턴)` },
 
-  whirlwindSlash:{ name:'회전 베기(광역)', kind:'active', job:'warrior', maxLevel:8, unlockLv:20, manaCost:42, aoe:true,
+  whirlwindSlash:{ name:'회전 베기(광역)', kind:'active', job:'warrior', maxLevel:15, unlockLv:20, manaCost:42, aoe:true,
     cooldown:5, dmgType:'physical',
     desc:'[전사] 마나를 소모해 주변 적까지 함께 베어냅니다. 사냥 중에는 다음 몬스터에게도 피해가 전이됩니다.',
     mult:(lv)=>0.38+0.08*(lv-1),
     effectText:(lv)=> lv===0?'미보유':`쿨타임 5턴 · 광역피해 ATK의 ${Math.round((0.38+0.08*(lv-1))*100)}%` },
-  arrowRain:    { name:'화살비(광역)', kind:'active', job:'archer', maxLevel:8, unlockLv:20, manaCost:36, aoe:true,
+  arrowRain:    { name:'화살비(광역)', kind:'active', job:'archer', maxLevel:15, unlockLv:20, manaCost:36, aoe:true,
     cooldown:5, dmgType:'physical',
     desc:'[궁수] 마나를 소모해 하늘에서 화살비를 퍼붓습니다. 사냥 중에는 다음 몬스터에게도 피해가 전이됩니다.',
     mult:(lv)=>0.34+0.08*(lv-1),
     effectText:(lv)=> lv===0?'미보유':`쿨타임 5턴 · 광역피해 ATK의 ${Math.round((0.34+0.08*(lv-1))*100)}%` },
-  iceStorm:     { name:'눈보라(광역)', kind:'active', job:'mage', maxLevel:8, unlockLv:20, manaCost:46, aoe:true,
+  iceStorm:     { name:'눈보라(광역)', kind:'active', job:'mage', maxLevel:15, unlockLv:20, manaCost:46, aoe:true,
     cooldown:6, dmgType:'magic',
     desc:'[마법사] 마나를 소모해 냉기 폭풍을 일으켜 넓은 범위에 피해를 입힙니다. 사냥 중에는 다음 몬스터에게도 피해가 전이됩니다.',
     mult:(lv)=>0.42+0.1*(lv-1),
     effectText:(lv)=> lv===0?'미보유':`쿨타임 6턴 · 광역피해 ATK의 ${Math.round((0.42+0.1*(lv-1))*100)}%` },
-  bladeFlurry:  { name:'칼날 폭풍(광역)', kind:'active', job:'rogue', maxLevel:8, unlockLv:20, manaCost:38, aoe:true,
+  bladeFlurry:  { name:'칼날 폭풍(광역)', kind:'active', job:'rogue', maxLevel:15, unlockLv:20, manaCost:38, aoe:true,
     cooldown:5, dmgType:'physical',
     desc:'[도적] 마나를 소모해 주변을 빠르게 베어 넘기는 연속 공격을 가합니다. 사냥 중에는 다음 몬스터에게도 피해가 전이됩니다.',
     mult:(lv)=>0.36+0.08*(lv-1),
     effectText:(lv)=> lv===0?'미보유':`쿨타임 5턴 · 광역피해 ATK의 ${Math.round((0.36+0.08*(lv-1))*100)}%` },
 
-  manaCycle:    { name:'마나 순환술', kind:'passive', maxLevel:8, unlockLv:6,
+  manaCycle:    { name:'마나 순환술', kind:'passive', maxLevel:15, unlockLv:6,
     desc:'매 턴 마나를 소량 추가로 회복합니다.',
     regenPerTurn:(lv)=> 1.5+1.5*lv,
     effectText:(lv)=> lv===0?'미보유':`턴당 마나 +${1.5+1.5*lv}` },
-  manaSiphon:   { name:'마나 흡수술', kind:'passive', maxLevel:8, unlockLv:9,
+  manaSiphon:   { name:'마나 흡수술', kind:'passive', maxLevel:15, unlockLv:9,
     desc:'공격 시 확률로 마나를 추가로 회복합니다.',
     chance:(lv)=>0.12+0.024*(lv-1), amount:(lv)=>3+1.5*lv,
     effectText:(lv)=> lv===0?'미보유':`발동확률 ${Math.round((0.12+0.024*(lv-1))*100)}% · 마나 +${3+1.5*lv}` }
@@ -2167,7 +2167,7 @@ function buildAdvancedJobSkills(){
       // 액티브 2개: 1개는 버프형, 1개는 광역 공격형
       const a1Key = `${jobKey}_t${tier}_a1`;
       SKILL_DEFS[a1Key] = {
-        name: flavor.a1, kind:'active', job:jobKey, tier, reqRank:tier, maxLevel:8, unlockLv, manaCost,
+        name: flavor.a1, kind:'active', job:jobKey, tier, reqRank:tier, maxLevel:15, unlockLv, manaCost,
         buffType:'buff', cooldown:6+tier, buffDuration:60,
         desc:`[${rankLabel}] 마나를 소모해 일정 시간 공격력을 크게 올립니다. 지속시간이 끝나면 재사용해야 합니다.`,
         buffMult:(lv)=>(0.15+0.08*(tier-1))+0.05*(lv-1),
@@ -2176,7 +2176,7 @@ function buildAdvancedJobSkills(){
       tierKeys.push(a1Key);
       const a2Key = `${jobKey}_t${tier}_a2`;
       SKILL_DEFS[a2Key] = {
-        name: flavor.a2, kind:'active', job:jobKey, tier, reqRank:tier, maxLevel:8, unlockLv, manaCost: manaCost+10, aoe:true,
+        name: flavor.a2, kind:'active', job:jobKey, tier, reqRank:tier, maxLevel:15, unlockLv, manaCost: manaCost+10, aoe:true,
         cooldown:5+tier, dmgType: jobKey==='mage' ? 'magic' : 'physical',
         desc:`[${rankLabel}] 마나를 소모해 광역 피해를 입히고, 사냥 중에는 다음 몬스터에게도 피해가 전이됩니다.`,
         mult:(lv)=>(0.5+0.21*(tier-1))+0.13*(lv-1),
@@ -2190,7 +2190,7 @@ function buildAdvancedJobSkills(){
         const isPct = (statKey==='critChance'||statKey==='critDmg'||statKey==='atkPct');
         const per = isPct ? (0.4+tier*0.3) : (1+tier); // %p 또는 스탯 고정치
         SKILL_DEFS[pKey] = {
-          name: `${rankLabel}의 ${PASSIVE_STAT_LABEL[statKey]} 단련`, kind:'passive', job:jobKey, tier, reqRank:tier, maxLevel:8, unlockLv,
+          name: `${rankLabel}의 ${PASSIVE_STAT_LABEL[statKey]} 단련`, kind:'passive', job:jobKey, tier, reqRank:tier, maxLevel:15, unlockLv,
           desc:`[${rankLabel}] ${PASSIVE_STAT_LABEL[statKey]}이(가) 영구적으로 증가합니다.`,
           statKey, statAmt:(lv)=> Math.round(per*lv*10)/10,
           effectText:(lv)=> lv===0?'미보유':`${PASSIVE_STAT_LABEL[statKey]} +${Math.round(per*lv*10)/10}${isPct?'%':''}`
@@ -2226,10 +2226,10 @@ function buildBranchSkills(){
     const job = info.job;
     const dmgType = job==='mage' ? 'magic' : 'physical';
     function addActive(id, name, opts){
-      SKILL_DEFS[`${branch}_${id}`] = Object.assign({ name, kind:'active', job, branch, tier, reqRank, maxLevel:10, unlockLv, manaCost, dmgType }, opts);
+      SKILL_DEFS[`${branch}_${id}`] = Object.assign({ name, kind:'active', job, branch, tier, reqRank, maxLevel:20, unlockLv, manaCost, dmgType }, opts);
     }
     function addPassive(id, name, opts){
-      SKILL_DEFS[`${branch}_${id}`] = Object.assign({ name, kind:'passive', job, branch, tier, reqRank, maxLevel:10, unlockLv }, opts);
+      SKILL_DEFS[`${branch}_${id}`] = Object.assign({ name, kind:'passive', job, branch, tier, reqRank, maxLevel:20, unlockLv }, opts);
     }
     const ult = (lv)=>2.0+0.5*(lv-1);
     const aoeM = (lv)=>0.62+0.16*(lv-1);
@@ -2371,7 +2371,7 @@ function buildTier5Skills(){
       }
     });
     SKILL_DEFS[key] = Object.assign({
-      name, job:jobKey, tier, reqRank, maxLevel:10
+      name, job:jobKey, tier, reqRank, maxLevel:20
     }, wrapped, { desc: `[${rankLabel}] ${opts.desc}` });
   }
   function passiveStat(jobKey, id, name, rankLabel, statKey, per, unlockLv, descExtra){
@@ -3303,7 +3303,7 @@ const FARM_CROP_DEFS = {
   // tickFarmProduction()에서 expNeeded(state.level) * perSecondAmt(rarityKey)로 실제 생산량을 계산한다.
   // [밸런스 너프] 작물/나무/동물의 초당 경험치 생산량을 소폭 추가 하향(10%).
   expLeaf:        { name:'지혜의 잎',  kind:'reward', rewardType:'exp',  seedType:'sageLeafSeed',
-                    perSecondAmt:(rk)=> 0.0001296 * (RARITY_MULT[rk]||1), bonusPct:(rk)=> 1 * (RARITY_MULT[rk]||1) },
+                    perSecondAmt:(rk)=> 0.00008424 * (RARITY_MULT[rk]||1), bonusPct:(rk)=> 1 * (RARITY_MULT[rk]||1) }, // [밸런스 너프] 초당 경험치 35% 추가 하향
   gemFlower:      { name:'보석꽃',     kind:'reward', rewardType:'gem',  seedType:'gemFlowerSeed',
                     perSecondAmt:(rk)=> Math.max(1, Math.round(0.2 * (RARITY_MULT[rk]||1))), bonusPct:(rk)=> 1.2 * (RARITY_MULT[rk]||1) },
   strengthRoot:   { name:'힘의 뿌리',  kind:'combat', statKey:'str', seedType:'strengthRootSeed',
@@ -3318,7 +3318,7 @@ const FARM_TREE_DEFS = {
                     perSecondAmt:(rk)=> Math.round(3 * (RARITY_MULT[rk]||1)), bonusPct:(rk)=> 1.5 * (RARITY_MULT[rk]||1) },
   // wisdomTree도 expLeaf와 동일하게 "현재 레벨 경험치 요구량 대비 초당 비율"을 반환한다 (절대치 아님).
   wisdomTree:     { name:'지혜의 나무', kind:'reward', rewardType:'exp',  woodType:'pine',
-                    perSecondAmt:(rk)=> 0.00019008 * (RARITY_MULT[rk]||1), bonusPct:(rk)=> 1.5 * (RARITY_MULT[rk]||1) },
+                    perSecondAmt:(rk)=> 0.00012355 * (RARITY_MULT[rk]||1), bonusPct:(rk)=> 1.5 * (RARITY_MULT[rk]||1) }, // [밸런스 너프] 초당 경험치 35% 추가 하향
   gemstoneTree:   { name:'보석나무',   kind:'reward', rewardType:'gem',  woodType:'mahogany',
                     perSecondAmt:(rk)=> Math.max(1, Math.round(0.3 * (RARITY_MULT[rk]||1))), bonusPct:(rk)=> 1.8 * (RARITY_MULT[rk]||1) },
   ironbarkTree:   { name:'철목나무',   kind:'combat', statKey:'atk', woodType:'ironwood',
@@ -3334,7 +3334,7 @@ const FARM_TREE_DEFS = {
 const FARM_ANIMAL_DEFS = {
   chicken: { name:FARM_ICON_SVG.chicken+' 닭', label:'닭', rewardType:'gold', baseAmt:(rk)=> Math.round(2.5 * (RARITY_MULT[rk]||1)) },
   // pig도 rewardType==='exp'이므로 baseAmt는 "현재 레벨 경험치 요구량 대비 초당 비율"을 반환한다 (절대치 아님).
-  pig:     { name:FARM_ICON_SVG.pig+' 돼지', label:'돼지', rewardType:'exp', baseAmt:(rk)=> 0.00015552 * (RARITY_MULT[rk]||1) },
+  pig:     { name:FARM_ICON_SVG.pig+' 돼지', label:'돼지', rewardType:'exp', baseAmt:(rk)=> 0.00010109 * (RARITY_MULT[rk]||1) }, // [밸런스 너프] 초당 경험치 35% 추가 하향
   cow:     { name:FARM_ICON_SVG.cow+' 소', label:'소', rewardType:'gem', baseAmt:(rk)=> Math.max(1, Math.round(0.25 * (RARITY_MULT[rk]||1))) }
 };
 const FARM_ANIMAL_KEYS = Object.keys(FARM_ANIMAL_DEFS);
@@ -4322,7 +4322,15 @@ function computeTotalsFor(s){
   if(affixAcc.gemFind>0) totalEquipEffects.push(AFFIX_TYPES.gemFind.text(Math.round(affixAcc.gemFind*10)/10));
   if(affixAcc.cooldownReduction>0) totalEquipEffects.push(AFFIX_TYPES.cooldownReduction.text(Math.round(affixAcc.cooldownReduction*10)/10));
 
-  const cooldownReductionPct = clamp(affixAcc.cooldownReduction, 0, 70);
+  // [밸런스 조정] 쿨타임 감소 상한을 70% -> 95%로 올리고, 그 이상 초과분은 버려지지 않고
+  // 소량의 공격력으로 환산되도록 한다 (치명타확률 초과분이 치명타피해로 환산되는 것과 같은 패턴).
+  const cooldownReductionPct = clamp(affixAcc.cooldownReduction, 0, 95);
+  const cooldownReductionOverflow = Math.max(0, affixAcc.cooldownReduction - 95);
+  if(cooldownReductionOverflow > 0) atk = Math.round(atk * (1 + cooldownReductionOverflow * 0.0001)); // 초과 쿨감 1%당 공격력 +0.01%
+  // [밸런스 조정] 피해흡혈에도 상한(50%)을 새로 두고, 그 이상 초과분은 버려지지 않고 소량의 공격력으로 환산한다.
+  const lifestealOverflow = Math.max(0, lifestealPct - 50);
+  lifestealPct = clamp(lifestealPct, 0, 50);
+  if(lifestealOverflow > 0) atk = Math.round(atk * (1 + lifestealOverflow * 0.0001)); // 초과 흡혈 1%당 공격력 +0.01%
   return { totals, atk, def, hp, spd, crit, critDmgMult, skillMult, maxMana, lifestealPct, manaOnHitChance, manaOnHitAmount,
     effectProcs, goldFindPct, expFindPct, setBonusText, totalEquipEffects, cp, manaRegenFlat: Math.round(affixAcc.manaRegen), bonusSplashTargets: Math.round(affixAcc.multiTarget),
     physPenPct: affixAcc.physPen, magicPenPct: affixAcc.magicPen, bossDmgPct: affixAcc.bossDmg, gemFindPct: affixAcc.gemFind, cooldownReductionPct, buffDurationPct };
@@ -5068,16 +5076,19 @@ function renderSpiritGearSub(){
   const sortedGear = [...state.spiritGear]
     .filter(g=> spiritGearFilter==='all' || g.rarityKey===spiritGearFilter)
     .sort((a,b)=> (RARITY_MULT[b.rarityKey]||0) - (RARITY_MULT[a.rarityKey]||0));
+  // [최적화] 예전에는 목록의 아이템마다 computeTotals()를 "장착 전/후" 두 번씩 호출해, 가방에 아이템이
+  // 많을수록 렌더링할 때마다 전체 전투력 계산이 항목 수의 2배만큼 반복됐다(장착 전 CP는 매번 동일한 값인데도
+  // 매번 다시 계산했다). 장착 전 기준 CP는 목록을 그리기 전에 딱 한 번만 계산해두고 재사용한다.
+  const baseSpiritCP = computeTotals().cp;
   const gearCards = sortedGear.map(g=>{
     const rarity = RARITY_BY_KEY[g.rarityKey]||{};
     const equippedForSlot = state.spirit.equipment[g.slotType];
     // 정령 장비도 실제로 캐릭터 전투력(computeSpiritBonus를 통해)에 반영되므로 착용 시 예상 전투력 변화를 보여준다.
     const prevGear = state.spirit.equipment[g.slotType];
-    const beforeCP = computeTotals().cp;
     state.spirit.equipment[g.slotType] = g;
     const afterCP = computeTotals().cp;
     state.spirit.equipment[g.slotType] = prevGear;
-    const cpDelta = afterCP - beforeCP;
+    const cpDelta = afterCP - baseSpiritCP;
     const cpColor = cpDelta>0?'var(--ok)':cpDelta<0?'var(--danger)':'var(--text-dim)';
     const cpText = cpDelta>0?`전투력 +${cpDelta.toLocaleString()}`:cpDelta<0?`전투력 ${cpDelta.toLocaleString()}`:'전투력 변화 없음';
     return `<div class="shop-item" style="border-color:${rarity.color||''};">
@@ -5535,10 +5546,12 @@ function renderPetInfoBox(){
 // [신규] 펫 장비 스탯 비교: 인벤토리 장비 비교(compare-cp-badge/compare-stats-box)와 동일한 패턴으로
 // 스탯 항목별 증감(현재 장착 장비 대비)과 함께, 실제 착용 시의 전투력(CP) 변화량도 함께 보여준다.
 // (펫의 스탯은 computePetBonus를 통해 computeTotalsFor의 CP 계산에 실제로 반영되므로 계산 가능하다)
-function petGearCPDelta(petId, slotType, candidate){
+// [최적화] baselineCP를 미리 계산해 넘기면(목록을 여러 개 그릴 때) 후보마다 반복해서 "장착 전" 상태를
+// 다시 계산하지 않아도 된다 - 인벤토리 장비 비교(computeCPDelta)와 동일한 패턴.
+function petGearCPDelta(petId, slotType, candidate, baselineCP){
   const pet = (state.pets||[]).find(p=>p.id===petId);
   if(!pet) return 0;
-  const before = computeTotals().cp;
+  const before = (typeof baselineCP === 'number') ? baselineCP : computeTotals().cp;
   const prevGear = pet.equipment[slotType];
   pet.equipment[slotType] = candidate;
   const after = computeTotals().cp;
@@ -5569,6 +5582,7 @@ function openPetGearPicker(petId, slotType){
   if(!owned.length) return;
   const pet = (state.pets||[]).find(p=>p.id===petId);
   const equippedGear = pet ? pet.equipment[slotType] : null;
+  const petGearPickerBaseCP = computeTotals().cp;
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay';
   overlay.id = 'petGearPickModal';
@@ -5584,7 +5598,7 @@ function openPetGearPicker(petId, slotType){
           return (STAT_LABEL[k]||k)+' +'+v;
         }).join(' · ');
         const affixText = (g.affixes||[]).map(l=>affixLineText(l)).join(' · ');
-        const cpDelta = petGearCPDelta(petId, slotType, g);
+        const cpDelta = petGearCPDelta(petId, slotType, g, petGearPickerBaseCP);
         const cpColor = cpDelta>0?'var(--ok)':cpDelta<0?'var(--danger)':'var(--text-dim)';
         const cpText = cpDelta>0?`전투력 +${cpDelta.toLocaleString()}`:cpDelta<0?`전투력 ${cpDelta.toLocaleString()}`:(state.equippedPets||[]).includes(petId)?'전투력 변화 없음':'펫 미착용 (전투력 반영 안 됨)';
         return `<button class="shop-item" data-pick-gear="${g.id}" style="text-align:left;border-color:${r.color};">
@@ -8836,6 +8850,11 @@ function towerFloorMult(floor){
   return mult;
 }
 // 체력에만 별도로 적용되는, 층마다 더 가파르게 증가하는 추가 배수 (공격력/방어력에는 영향 없음)
+// [신규] 층수가 오를수록 골드/경험치/보석 보상이 선형이 아니라 점진적으로 더 가파르게 늘어나도록 하는 배율.
+// 저층(1~20층 정도)은 거의 원래 그대로이고, 그 이후부터 완만하게 가속되어 고층에서는 훨씬 더 많이 받는다.
+function towerRewardGrowthMult(floor){
+  return 1 + Math.pow(Math.max(0, floor) / 40, 1.4) * 0.7;
+}
 function towerHpFloorExtraMult(floor){
   let mult = 1 + Math.pow(floor/12, 2.3);
   if(floor > 50){
@@ -8995,9 +9014,10 @@ function finishTowerFloor(result, enemy, timedOut){
   towerRun.hp = result.endHp; towerRun.mana = result.endMana;
   const logEl = document.getElementById('towerLog');
   if(result.outcome==='win' && !timedOut){
-    const goldGain = Math.round(enemy.level*8 + towerRun.floor*6);
-    const expGain = Math.round(enemy.level*12 + towerRun.floor*10);
-    const gemGain = randInt(10,25) + (enemy.isMajor?60:enemy.isMid?24:0);
+    const rewardGrowth = towerRewardGrowthMult(towerRun.floor);
+    const goldGain = Math.round((enemy.level*8 + towerRun.floor*6) * rewardGrowth);
+    const expGain = Math.round((enemy.level*12 + towerRun.floor*10) * rewardGrowth);
+    const gemGain = Math.round((randInt(10,25) + (enemy.isMajor?60:enemy.isMid?24:0)) * rewardGrowth);
     rollExp4xFragmentDrop();
     state.gold += goldGain; state.gems += gemGain;
     gainExp(expGain);
@@ -9216,7 +9236,7 @@ const TOWER_HARD_MEDAL_FLOORS = [50, 100, 150, 175, 200];
 // [2차 상향] "하드모드 난이도를 많이 올려달라"는 요청에 따라 스탯 배율과 층별 성장 곡선을 추가로 상향.
 // 하드모드 몬스터 최종 스탯(atk/def/magicDef/hp)을 일반 모드 대비 몇 배로 만드는 배율. 10배 -> 25배로 상향.
 // [3차 상향] "하드모드 난이도를 더 올려달라"는 추가 요청에 따라 한 번 더 상향 (25배 -> 40배).
-const TOWER_HARD_STAT_MULT = 40;
+const TOWER_HARD_STAT_MULT = 65; // 하드모드 난이도 추가 상향: 40 -> 55 -> 65
 // 층마다 강해지는 상승 곡선의 지수를 일반 모드보다 얼마나 더 가파르게 적용할지. 60% -> 120%로 재상향.
 const TOWER_HARD_GROWTH_EXP_BUMP = 2.2;
 // 스탯 자체가 훨씬 커졌으므로, 플레이어가 가하는 피해 감쇠도 그만큼 더 낮춰 난이도가 실제로 훨씬 어렵게 체감되도록 한다.
@@ -9355,9 +9375,10 @@ function finishTowerHardFloor(result, enemy, timedOut){
   towerHardRun.hp = result.endHp; towerHardRun.mana = result.endMana;
   const logEl = document.getElementById('towerHardLog');
   if(result.outcome==='win' && !timedOut){
-    const goldGain = Math.round((enemy.level*8 + towerHardRun.floor*6) * TOWER_HARD_REWARD_MULT);
-    const expGain = Math.round((enemy.level*12 + towerHardRun.floor*10) * TOWER_HARD_REWARD_MULT);
-    const gemGain = Math.round((randInt(10,25) + (enemy.isMajor?60:enemy.isMid?24:0)) * TOWER_HARD_REWARD_MULT);
+    const rewardGrowthHard = towerRewardGrowthMult(towerHardRun.floor);
+    const goldGain = Math.round((enemy.level*8 + towerHardRun.floor*6) * TOWER_HARD_REWARD_MULT * rewardGrowthHard);
+    const expGain = Math.round((enemy.level*12 + towerHardRun.floor*10) * TOWER_HARD_REWARD_MULT * rewardGrowthHard);
+    const gemGain = Math.round((randInt(10,25) + (enemy.isMajor?60:enemy.isMid?24:0)) * TOWER_HARD_REWARD_MULT * rewardGrowthHard);
     rollExp4xFragmentDrop();
     state.gold += goldGain; state.gems += gemGain;
     gainExp(expGain);
@@ -9742,7 +9763,7 @@ function simulateBattle(playerStats, skills, enemy, job, startHp, startMana, pot
   const physPenPct = clamp(playerStats.physPenPct||0, 0, 90);
   const magicPenPct = clamp(playerStats.magicPenPct||0, 0, 90);
   const bossDmgMult = enemy.isBoss ? (1 + (playerStats.bossDmgPct||0)/100) : 1;
-  const cooldownReductionMult = 1 - clamp(playerStats.cooldownReductionPct||0, 0, 70)/100;
+  const cooldownReductionMult = 1 - clamp(playerStats.cooldownReductionPct||0, 0, 95)/100;
   // 주스탯 비율에 비례한 액티브 스킬 데미지 보너스 배율. 평타(기본 공격)에는 영향을 주지 않고,
   // 아래 castAttackSkill()에서 처리되는 액티브 스킬 피해에만 곱해진다.
   const mainStatRoleForCoef = JOB_STAT_ROLE[job];
@@ -10791,8 +10812,9 @@ const RAID_STAGES = [
   { stage:1, name:'하급 정령의 둥지', hpMult:1,     atkMult:1,    defMult:1 },
   { stage:2, name:'뒤틀린 성소',     hpMult:14,    atkMult:5.2,  defMult:4.2 },
   { stage:3, name:'침식된 심연',     hpMult:185,   atkMult:25,   defMult:16.5 },
-  { stage:4, name:'폭풍의 제단',     hpMult:2400,  atkMult:122,  defMult:64 },
-  { stage:5, name:'종언의 회랑',     hpMult:31500, atkMult:580,  defMult:236 }
+  // [밸런스 조정] 4·5단계는 다른 단계보다 체감 난이도가 낮다는 피드백에 따라 추가로 상향 (4단계 약 1.8배, 5단계 약 2.2배).
+  { stage:4, name:'폭풍의 제단',     hpMult:4300,  atkMult:200,  defMult:105 },
+  { stage:5, name:'종언의 회랑',     hpMult:69000, atkMult:1150, defMult:470 }
 ];
 function raidAttemptAvailable(){
   const key = todayKey();
@@ -10831,7 +10853,7 @@ function buyRaidTicketWithGems(){
 // 정해졌다. 그래서 레벨 낮은 캐릭터로 입장하면 보스가 약하게 생성되는데, 거기에 훨씬 강한 다른 캐릭터를
 // 같은 파티로 태우면 최고 단계를 손쉽게 잡아버리는 불균형이 있었다. 이제 레이드 스탯은 캐릭터 레벨과
 // 완전히 무관하게, 오직 단계(stageDef.stage)로만 정해지는 고정 난이도를 따른다.
-const RAID_REF_LEVEL = 80; // 캐릭터 레벨 대신 사용하는 고정 기준치
+const RAID_REF_LEVEL = 230; // 캐릭터 레벨 대신 사용하는 고정 기준치 (난이도 추가 상향: 80 -> 130 -> 200 -> 230)
 function generateRaidEnemy(stageDef){
   // [밸런스 조정] 레이드 몬스터 기본 스탯(HP/공격력/방어력/마법방어력) 자체를 전반적으로 상향한다.
   // (아래 dmgTakenMult로 적용되는 "플레이어가 가하는 피해를 약 0.00001% 수준으로 감쇠"와는 별개의 스탯 자체 상향이다.)
@@ -10969,6 +10991,31 @@ function runRaidChunk(){
   // 멈춘 것처럼 보이고, 레이드는 여러 청크로 이어지므로 클리어할 때마다 이게 누적되어 브라우저가 매우 느려지는
   // 원인이 됐다. 시험의 탑과 동일하게, 로그가 많을수록 여러 줄을 한 번에 묶어서 재생해 총 재생 시간을 bound한다.
   const RAID_MAX_ANIM_STEPS = 80;
+  // [버그 수정] 공격속도가 극단적으로 높으면 한 청크(simulateBattle 최대 20000회 반복) 안에서도
+  // 90초 제한시간에 도달하지 못하고 outcome이 'draw'(미결정)로 끝나, runRaidChunk가 스스로를 계속
+  // 반복 호출하는 경우가 있다. 이런 "아직 승패가 안 갈린" 중간 청크까지 매번 80스텝(약 7초)씩 느리게
+  // 재생하면, 청크가 여러 번 이어질 때마다 그 시간이 누적되어 클리어 직후 체감상 심한 렉처럼 보였다.
+  // 승패가 실제로 결정되는 마지막 청크만 원래대로 애니메이션으로 보여주고, 아직 결정되지 않은 중간
+  // 청크는 로그만 즉시 다 채워넣고 지연 없이 바로 다음 청크로 넘어간다.
+  const isIntermediateChunk = (result.outcome !== 'win' && result.outcome !== 'lose' && result.outcome !== 'timeout');
+  if(isIntermediateChunk){
+    result.log.forEach(entry=>{
+      const l = document.createElement('div'); l.className=entry.cls; l.textContent=entry.text; logEl.appendChild(l);
+    });
+    logEl.scrollTop = logEl.scrollHeight;
+    while(logEl.childNodes.length > 50) logEl.removeChild(logEl.firstChild);
+    const lastEntry = result.log[result.log.length-1];
+    if(lastEntry){
+      const enHpEl = document.getElementById('raidEnHp'); if(enHpEl) enHpEl.style.width = clamp((lastEntry.enHp/raidRun.enemy.maxHp)*100,0,100)+'%';
+      const myHpEl = document.getElementById('raidMyHp'); if(myHpEl) myHpEl.style.width = clamp((lastEntry.myHp/raidRun.playerStats.hp)*100,0,100)+'%';
+      const myHpText = document.getElementById('raidMyHpText'); if(myHpText) myHpText.textContent = `${Math.round(Math.max(0,lastEntry.myHp))}/${raidRun.playerStats.hp}`;
+      const myManaEl = document.getElementById('raidMyMana'); if(myManaEl) myManaEl.style.width = clamp((lastEntry.mana/raidRun.playerStats.maxMana)*100,0,100)+'%';
+      const myManaText = document.getElementById('raidMyManaText'); if(myManaText) myManaText.textContent = `${Math.round(Math.max(0,lastEntry.mana))}/${raidRun.playerStats.maxMana}`;
+      renderStatusIcons('raidStatus', null, lastEntry);
+    }
+    setTimeout(runRaidChunk, 0);
+    return;
+  }
   const raidStepInc = Math.max(1, Math.ceil(result.log.length / RAID_MAX_ANIM_STEPS));
   let i = 0;
   const comboState = { streak:0 };
@@ -11011,11 +11058,13 @@ function finishRaidChallenge(reason){
     // [3차 밸런스 조정] 스탯 증가폭(hp가 단계당 수 배~수십 배씩 증가)에 맞춰 보상도 단계에 대해
     // 더 강한 지수적 성장을 하도록 growth factor(1.6^(stage-1))를 곱한다.
     const stageGrowth = Math.pow(1.6, stageDef.stage-1);
-    const goldGain = Math.round((400 + stageDef.stage*900) * stageGrowth * (1+(runeBonus.expedGoldPct||0)/100));
-    const expGain = Math.round((300 + stageDef.stage*700) * stageGrowth);
+    // [밸런스 조정] 4·5단계는 난이도를 크게 올린 만큼, 보상도 별도로 더 얹어준다 (4단계 +40%, 5단계 +80%).
+    const highStageRewardBonus = stageDef.stage===4 ? 1.4 : stageDef.stage===5 ? 1.8 : 1;
+    const goldGain = Math.round((400 + stageDef.stage*900) * stageGrowth * highStageRewardBonus * (1+(runeBonus.expedGoldPct||0)/100));
+    const expGain = Math.round((300 + stageDef.stage*700) * stageGrowth * highStageRewardBonus);
     state.gold += goldGain; gainExp(expGain);
     // 정령의 힘 계열 보상 (단계가 높을수록 품질/수량이 더 가파르게 상승, 축복받은 정령의 힘은 낮은 확률)
-    const normalGain = randInt(2,4) + stageDef.stage*stageDef.stage;
+    const normalGain = Math.round((randInt(2,4) + stageDef.stage*stageDef.stage) * highStageRewardBonus);
     const radiantGain = Math.random() < (0.15+stageDef.stage*0.08) ? randInt(1,2)+stageDef.stage : 0;
     const blessedGain = Math.random() < (0.03+stageDef.stage*0.035) ? 1+Math.floor(stageDef.stage/3) : 0;
     state.expedition.essence.normal += normalGain;
@@ -11396,8 +11445,8 @@ function renderExpedGearSub(){
 // [5차 조정] "전체적인 몬스터 공격력/방어력을 조금씩, 보스/월드보스/레이드는 전체적으로" 상향 요청에 따라 추가 상향.
 const DUNGEON_DIFFICULTY_BUMP = 1.12;   // 던전: 소폭(+8% -> +12%)
 const FIELD_BOSS_DIFFICULTY_BUMP = 1.3; // 필드보스(BOSSES 목록): +20% -> +30%
-const TOWER_DIFFICULTY_BUMP = 1.15;     // 시험의 탑: +15%
-const RAID_DIFFICULTY_BUMP = 1.28;      // 레이드: +18% -> +28%
+const TOWER_DIFFICULTY_BUMP = 1.65;     // 시험의 탑: 난이도 추가 상향 (+15% -> +45% -> +65%)
+const RAID_DIFFICULTY_BUMP = 2.7;       // 레이드: 전체 난이도 추가 상향 (+28% -> +70% -> +140% -> +170%)
 const WORLDBOSS_DIFFICULTY_BUMP = 1.25; // 월드보스 체력/방어: +15% -> +25%
 const DUMMY_DIFFICULTY_BUMP = 1.15;     // 허수아비 방어: +15%
 

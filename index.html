@@ -3303,7 +3303,7 @@ const FARM_CROP_DEFS = {
   // tickFarmProduction()에서 expNeeded(state.level) * perSecondAmt(rarityKey)로 실제 생산량을 계산한다.
   // [밸런스 너프] 작물/나무/동물의 초당 경험치 생산량을 소폭 추가 하향(10%).
   expLeaf:        { name:'지혜의 잎',  kind:'reward', rewardType:'exp',  seedType:'sageLeafSeed',
-                    perSecondAmt:(rk)=> 0.00008424 * (RARITY_MULT[rk]||1), bonusPct:(rk)=> 1 * (RARITY_MULT[rk]||1) }, // [밸런스 너프] 초당 경험치 35% 추가 하향
+                    perSecondAmt:(rk)=> 0.000025272 * (RARITY_MULT[rk]||1), bonusPct:(rk)=> 1 * (RARITY_MULT[rk]||1) }, // [밸런스 너프] 초당 경험치 70% 추가 하향
   gemFlower:      { name:'보석꽃',     kind:'reward', rewardType:'gem',  seedType:'gemFlowerSeed',
                     perSecondAmt:(rk)=> Math.max(1, Math.round(0.2 * (RARITY_MULT[rk]||1))), bonusPct:(rk)=> 1.2 * (RARITY_MULT[rk]||1) },
   strengthRoot:   { name:'힘의 뿌리',  kind:'combat', statKey:'str', seedType:'strengthRootSeed',
@@ -3318,7 +3318,7 @@ const FARM_TREE_DEFS = {
                     perSecondAmt:(rk)=> Math.round(3 * (RARITY_MULT[rk]||1)), bonusPct:(rk)=> 1.5 * (RARITY_MULT[rk]||1) },
   // wisdomTree도 expLeaf와 동일하게 "현재 레벨 경험치 요구량 대비 초당 비율"을 반환한다 (절대치 아님).
   wisdomTree:     { name:'지혜의 나무', kind:'reward', rewardType:'exp',  woodType:'pine',
-                    perSecondAmt:(rk)=> 0.00012355 * (RARITY_MULT[rk]||1), bonusPct:(rk)=> 1.5 * (RARITY_MULT[rk]||1) }, // [밸런스 너프] 초당 경험치 35% 추가 하향
+                    perSecondAmt:(rk)=> 0.000037065 * (RARITY_MULT[rk]||1), bonusPct:(rk)=> 1.5 * (RARITY_MULT[rk]||1) }, // [밸런스 너프] 초당 경험치 70% 추가 하향
   gemstoneTree:   { name:'보석나무',   kind:'reward', rewardType:'gem',  woodType:'mahogany',
                     perSecondAmt:(rk)=> Math.max(1, Math.round(0.3 * (RARITY_MULT[rk]||1))), bonusPct:(rk)=> 1.8 * (RARITY_MULT[rk]||1) },
   ironbarkTree:   { name:'철목나무',   kind:'combat', statKey:'atk', woodType:'ironwood',
@@ -3334,7 +3334,7 @@ const FARM_TREE_DEFS = {
 const FARM_ANIMAL_DEFS = {
   chicken: { name:FARM_ICON_SVG.chicken+' 닭', label:'닭', rewardType:'gold', baseAmt:(rk)=> Math.round(2.5 * (RARITY_MULT[rk]||1)) },
   // pig도 rewardType==='exp'이므로 baseAmt는 "현재 레벨 경험치 요구량 대비 초당 비율"을 반환한다 (절대치 아님).
-  pig:     { name:FARM_ICON_SVG.pig+' 돼지', label:'돼지', rewardType:'exp', baseAmt:(rk)=> 0.00010109 * (RARITY_MULT[rk]||1) }, // [밸런스 너프] 초당 경험치 35% 추가 하향
+  pig:     { name:FARM_ICON_SVG.pig+' 돼지', label:'돼지', rewardType:'exp', baseAmt:(rk)=> 0.000030327 * (RARITY_MULT[rk]||1) }, // [밸런스 너프] 초당 경험치 70% 추가 하향
   cow:     { name:FARM_ICON_SVG.cow+' 소', label:'소', rewardType:'gem', baseAmt:(rk)=> Math.max(1, Math.round(0.25 * (RARITY_MULT[rk]||1))) }
 };
 const FARM_ANIMAL_KEYS = Object.keys(FARM_ANIMAL_DEFS);
@@ -10891,13 +10891,7 @@ async function startRaidChallenge(stageNum, extraPartySlotIds){
   if(!avail.free && !avail.ticket){ showToast('오늘의 무료 입장을 모두 사용했고, 보유한 레이드 티켓도 없습니다', true); return; }
   if(!consumeRaidAttempt()){ showToast('입장에 실패했습니다', true); return; }
   const stageDef = RAID_STAGES[clamp(stageNum,1,5)-1];
-  const playerStats = computeTotals();
   const enemy = generateRaidEnemy(stageDef);
-  raidRun = {
-    stageDef, enemy, playerStats, hp: playerStats.hp, mana: playerStats.maxMana,
-    active:true, extraParty:[], extraDamage:0,
-    cooldownState: freshCooldownState()
-  };
   // 추가로 선택한 파티원(최대 2명)은 approxDps 근사 대신, 도전 시작 시점에 각자 simulateBattle을
   // 실제로 돌려서(공격속도 인터벌/스킬 쿨타임/우선순위가 반영된) 총 피해량과 실전 로그를 미리 얻어둔다.
   // 본인의 실시간 전투(runRaidChunk)를 시작하기 전에 이 계산을 모두 마쳐서, 화면에 처음부터
@@ -10912,6 +10906,21 @@ async function startRaidChallenge(stageNum, extraPartySlotIds){
     if(s && s.job) raidLoaded.push({ sid, s });
   }
   const raidPartyBuff = computePartyBuffBonus([state, ...raidLoaded.map(l=>l.s)]);
+  // [버그 수정] 지금 조작 중인(active) 캐릭터의 실시간 전투 스탯(playerStats)에는 파티 버프가
+  // 전혀 반영되지 않고, 추가로 데려간 파티원들에게만 raidPartyBuff가 적용되고 있었다. 그래서 같은
+  // 두 캐릭터로 레이드를 돌아도 "누가 직접 조작하는 캐릭터인가"에 따라 실제 전투력이 달라져,
+  // 클리어 속도가 크게 차이나는 불공평한 결과가 나왔다. 추가 파티원과 동일하게 active 캐릭터도
+  // 파티 버프를 받도록 맞춘다.
+  const playerStats = computeTotals();
+  if(raidPartyBuff && ((raidPartyBuff.atkPct||0)>0 || (raidPartyBuff.defPct||0)>0)){
+    playerStats.atk = Math.round(playerStats.atk * (1+(raidPartyBuff.atkPct||0)));
+    playerStats.def = Math.round(playerStats.def * (1+(raidPartyBuff.defPct||0)));
+  }
+  raidRun = {
+    stageDef, enemy, playerStats, hp: playerStats.hp, mana: playerStats.maxMana,
+    active:true, extraParty:[], extraDamage:0,
+    cooldownState: freshCooldownState()
+  };
   for(const { sid, s } of raidLoaded){
     const sim = simulatePartyMemberOffline(s, s.name||sid, sid, enemy, EXPED_CONFIG.RAID_TIME_LIMIT_SEC, raidPartyBuff);
     raidRun.extraParty.push(sim);
@@ -10925,8 +10934,8 @@ function renderRaidBattleScreen(){
   const box = document.getElementById('battlePanel');
   if(!box || !raidRun) return;
   const extraHtml = raidRun.extraParty.length ? `
-    <div style="font-size:10.5px;color:var(--text-dim);margin:8px 0 3px;">추가 파티원: ${raidRun.extraParty.map(p=>`${escapeHtml(p.name)}(${p.totalDamage.toLocaleString()} 피해)`).join(' · ')}</div>
-    <div class="battle-log" id="raidExtraLog" style="max-height:110px;">추가 파티원이 함께 전투를 진행합니다...</div>
+    <div style="font-size:10.5px;color:var(--text-dim);margin:8px 0 3px;" id="raidExtraSummary">추가 파티원: ${raidRun.extraParty.map(p=>`<span id="raidExtraDmg_${escapeHtml(String(p.slotId))}">${escapeHtml(p.name)}(0 피해)</span>`).join(' · ')}</div>
+    <div class="battle-log" id="raidExtraLog" style="max-height:110px;">추가 파티원이 나와 동시에 전투를 진행합니다...</div>
   ` : '';
   box.innerHTML = `
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
@@ -10943,20 +10952,34 @@ function renderRaidBattleScreen(){
     ${extraHtml}
   `;
 }
-// 추가 파티원의 실전 로그를 "이름님이(가) ~"형태로 raidExtraLog에 순차적으로 노출한다.
-function revealRaidExtraPartyLog(){
+// [수정] 추가 파티원의 피해량/로그를 전투 시작 시점에 한 번에 반영하지 않고, 본인의 실시간 전투
+// 진행률(progress, 0~1)에 비례해 조금씩 누적 노출한다 - 참여한 캐릭터도 본인과 "동시간에" 공격하고
+// 공격받고 스킬 쿨타임이 도는 것처럼 보이도록 하기 위함. 실제 데미지(raidRun.enemy.hp 차감)는 이미
+// 전투 시작 시 전부 반영되어 있으므로(승패 판정 안정성을 위해), 이 함수는 화면 표시(연출)만 갱신한다.
+function updateRaidExtraPartyReveal(progress){
   if(!raidRun || !raidRun.extraParty.length) return;
+  progress = clamp(progress, 0, 1);
   const extraLogEl = document.getElementById('raidExtraLog');
-  if(!extraLogEl) return;
-  extraLogEl.innerHTML = '';
   raidRun.extraParty.forEach(p=>{
-    p.log.forEach(entry=>{
-      const l = document.createElement('div'); l.className = entry.cls;
-      l.textContent = `${p.name}님이(가): ${entry.text}`;
-      extraLogEl.appendChild(l);
-    });
+    const targetDealt = Math.round(p.totalDamage * progress);
+    if(targetDealt > (p.revealedDealt||0)) p.revealedDealt = targetDealt;
+    const dmgEl = document.getElementById(`raidExtraDmg_${p.slotId}`);
+    if(dmgEl) dmgEl.textContent = `${p.name}(${(p.revealedDealt||0).toLocaleString()} 피해)`;
+    if(extraLogEl && p.log.length){
+      const targetLogIdx = Math.floor(progress * p.log.length);
+      while((p.revealedLogIdx||0) < targetLogIdx && (p.revealedLogIdx||0) < p.log.length){
+        const entry = p.log[p.revealedLogIdx||0];
+        p.revealedLogIdx = (p.revealedLogIdx||0) + 1;
+        const l = document.createElement('div'); l.className = entry.cls;
+        l.textContent = `${p.name}님이(가): ${entry.text}`;
+        extraLogEl.appendChild(l);
+      }
+    }
   });
-  extraLogEl.scrollTop = extraLogEl.scrollHeight;
+  if(extraLogEl){
+    extraLogEl.scrollTop = extraLogEl.scrollHeight;
+    while(extraLogEl.childNodes.length > 60) extraLogEl.removeChild(extraLogEl.firstChild);
+  }
 }
 function runRaidChunk(){
   if(!raidRun || !raidRun.active) return;
@@ -10970,9 +10993,14 @@ function runRaidChunk(){
       raidRun.enemy.hp = Math.max(1, raidRun.enemy.hp - p.totalDamage);
       raidRun.extraDamage += p.totalDamage;
       p.dealt = p.totalDamage;
+      p.revealedDealt = 0; p.revealedLogIdx = 0;
     });
-    revealRaidExtraPartyLog();
+    // [수정] 실제 피해 반영(위)은 승패 판정을 위해 전투 시작 시점에 즉시 처리하되, 화면 연출은
+    // 본인의 실시간 전투 진행률에 맞춰 progressive하게 노출한다 (updateRaidExtraPartyReveal 참고).
   }
+  // [수정] 추가 파티원 연출을 본인 전투와 동시간에 진행시키기 위해, 이번 청크 시작 시점의 누적
+  // 경과시간을 미리 기록해둔다 (청크가 끝난 뒤 raidRun.timeCarry.elapsed와의 사이를 보간한다).
+  const prevElapsedForReveal = raidRun.timeCarry ? raidRun.timeCarry.elapsed : 0;
   // 본인의 레이드 전투 구간에서도 협동(coop) 계열 5차 스킬이 강화된 효과로 계산되도록 플래그를 켠다.
   RAID_CONTEXT_ACTIVE = true;
   let result;
@@ -11004,6 +11032,9 @@ function runRaidChunk(){
     });
     logEl.scrollTop = logEl.scrollHeight;
     while(logEl.childNodes.length > 50) logEl.removeChild(logEl.firstChild);
+    // [수정] 아직 승패가 갈리지 않은 중간 청크도, 그 시점까지 흐른 실제 시간(raidTimeCarry.elapsed) 비율만큼
+    // 추가 파티원의 피해/로그를 함께 진행시켜 "동시간에" 싸우는 것처럼 보이게 한다.
+    updateRaidExtraPartyReveal((raidRun.timeCarry ? raidRun.timeCarry.elapsed : 0) / EXPED_CONFIG.RAID_TIME_LIMIT_SEC);
     const lastEntry = result.log[result.log.length-1];
     if(lastEntry){
       const enHpEl = document.getElementById('raidEnHp'); if(enHpEl) enHpEl.style.width = clamp((lastEntry.enHp/raidRun.enemy.maxHp)*100,0,100)+'%';
@@ -11019,10 +11050,16 @@ function runRaidChunk(){
   const raidStepInc = Math.max(1, Math.ceil(result.log.length / RAID_MAX_ANIM_STEPS));
   let i = 0;
   const comboState = { streak:0 };
+  // [수정] 이번(마지막) 청크가 시작되기 전까지 이미 흐른 시간과, 이번 청크가 끝나면 도달할 시간을
+  // 기록해두고, 프레임마다 그 사이를 애니메이션 진행률에 비례해 보간(interpolate)하여 추가 파티원의
+  // 피해/로그를 "동시간에" 조금씩 노출한다.
+  const raidChunkStartElapsed = prevElapsedForReveal;
+  const raidChunkEndElapsed = raidRun.timeCarry ? raidRun.timeCarry.elapsed : raidChunkStartElapsed;
   function step(){
     if(!raidRun || !raidRun.active) return;
     if(!document.body.contains(logEl)){ raidRun = null; return; }
     if(i>=result.log.length){
+      updateRaidExtraPartyReveal(raidChunkEndElapsed / EXPED_CONFIG.RAID_TIME_LIMIT_SEC);
       if(result.outcome==='win'){ finishRaidChallenge('win'); return; }
       if(result.outcome==='lose'){ finishRaidChallenge('lose'); return; }
       if(result.outcome==='timeout'){ finishRaidChallenge('timeout'); return; }
@@ -11044,6 +11081,10 @@ function runRaidChunk(){
     const myManaEl = document.getElementById('raidMyMana'); if(myManaEl) myManaEl.style.width = clamp((entry.mana/raidRun.playerStats.maxMana)*100,0,100)+'%';
     const myManaText = document.getElementById('raidMyManaText'); if(myManaText) myManaText.textContent = `${Math.round(Math.max(0,entry.mana))}/${raidRun.playerStats.maxMana}`;
     renderStatusIcons('raidStatus', null, entry);
+    // 이번 프레임의 애니메이션 진행률만큼 추가 파티원의 시간도 함께 흐르게 한다.
+    const frameProgress = nextI / result.log.length;
+    const interpElapsed = raidChunkStartElapsed + (raidChunkEndElapsed - raidChunkStartElapsed) * frameProgress;
+    updateRaidExtraPartyReveal(interpElapsed / EXPED_CONFIG.RAID_TIME_LIMIT_SEC);
     i = nextI; setTimeout(step, 90);
   }
   step();

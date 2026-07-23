@@ -4644,8 +4644,7 @@ function petCardHtml(pet){
 }
 /* =============================================================
    FARM TAB — UI (농장/사육장 서브탭 뼈대 + 농장 화면 렌더링)
-   담당: 농장(작물/나무) 탭 UI. 사육장 서브탭(renderRanchSub)의 실제 내용물은
-   다른 에이전트가 채울 예정이므로 여기서는 임시 플레이스홀더만 둔다.
+   담당: 농장(작물/나무) 탭 UI. 사육장 서브탭은 renderRanchSub()에서 렌더링한다.
    ============================================================= */
 let farmSubTab = 'farm';
 let farmPlantPickerMode = null; // null | 'crop' | 'tree' — 씨앗/나무 선택 피커 표시 여부
@@ -10736,6 +10735,10 @@ function runWorldBossTick(){
     const liveRemainHp = Math.max(0, worldBossRun.boss.hp - worldBossRun.totalDamage);
     const wbHpTextEl = document.getElementById('wbHpText'); if(wbHpTextEl) wbHpTextEl.textContent = `${liveRemainHp.toLocaleString()}/${worldBossRun.boss.maxHp.toLocaleString()}`;
     const wbHpBarEl = document.getElementById('wbHpBar'); if(wbHpBarEl) wbHpBarEl.style.width = clamp((liveRemainHp/worldBossRun.boss.maxHp)*100,0,100)+'%';
+    // [버그 수정] 체력바가 0까지 실시간으로 표시되는데도 정작 전투는 남은 제한시간이 다 될 때까지 계속
+    // 진행되던 문제 수정. 누적 피해량이 이미 보스의 남은 체력을 넘었다면(=화면상 체력바가 0이 됐다면)
+    // 남은 시간을 기다릴 필요 없이 즉시 전투를 종료한다.
+    if(liveRemainHp<=0){ worldBossRun.active=false; finishWorldBossChallenge(); return; }
     if(remain<=0){ worldBossRun.active=false; finishWorldBossChallenge(); return; }
     setTimeout(step, 500);
   }
@@ -11069,14 +11072,17 @@ function runRaidChunk(){
     setTimeout(runRaidChunk, 0);
     return;
   }
-  const raidStepInc = Math.max(1, Math.ceil(result.log.length / RAID_MAX_ANIM_STEPS));
   let i = 0;
+  let frameIdx = 0;
   const comboState = { streak:0 };
-  // [수정] 이번(마지막) 청크가 시작되기 전까지 이미 흐른 시간과, 이번 청크가 끝나면 도달할 시간을
-  // 기록해두고, 프레임마다 그 사이를 애니메이션 진행률에 비례해 보간(interpolate)하여 추가 파티원의
-  // 피해/로그를 "동시간에" 조금씩 노출한다.
+  // [수정] "로그도 시간 기준으로" 재생되도록, 프레임을 로그 개수 기준(균등 분할)이 아니라 각 로그 항목이
+  // 기록된 실제 게임 내 경과시간(entry.t)을 기준으로 균등 분할한다. 이번(마지막) 청크가 시작되기 전까지
+  // 이미 흐른 시간(raidChunkStartElapsed)과, 이번 청크가 끝나면 도달할 시간(raidChunkEndElapsed) 사이를
+  // RAID_MAX_ANIM_STEPS개의 균등한 시간 구간으로 나누고, 각 구간에 속하는 로그 항목들을 그 프레임에서
+  // 함께 보여준다. 추가 파티원의 진행률도 같은 entry.t를 그대로 사용해 완전히 같은 시간 기준으로 맞춘다.
   const raidChunkStartElapsed = prevElapsedForReveal;
   const raidChunkEndElapsed = raidRun.timeCarry ? raidRun.timeCarry.elapsed : raidChunkStartElapsed;
+  const raidChunkTotalSpan = Math.max(0.0001, raidChunkEndElapsed - raidChunkStartElapsed);
   function step(){
     if(!raidRun || !raidRun.active) return;
     if(!document.body.contains(logEl)){ raidRun = null; return; }
@@ -11087,27 +11093,34 @@ function runRaidChunk(){
       if(result.outcome==='timeout'){ finishRaidChallenge('timeout'); return; }
       runRaidChunk(); return;
     }
-    // 이번 프레임에서 묶어서 재생할 구간([i, nextI))의 마지막 항목만 실제로 화면에 반영한다
-    // (중간 항목들의 텍스트는 로그창에 순서대로 추가해 진행 흐름은 그대로 보여준다).
-    const nextI = Math.min(result.log.length, i + raidStepInc);
-    for(let j=i; j<nextI; j++){
+    frameIdx++;
+    const isLastFrame = frameIdx >= RAID_MAX_ANIM_STEPS;
+    const frameTimeEnd = raidChunkStartElapsed + raidChunkTotalSpan * Math.min(1, frameIdx / RAID_MAX_ANIM_STEPS);
+    const startI = i;
+    // 이번 시간 구간(frameTimeEnd) 이내에 기록된 로그 항목들을 전부 이번 프레임에 묶어서 보여준다.
+    // 마지막 프레임에서는 반올림 오차로 남을 수 있는 나머지 항목까지 전부 포함한다.
+    while(i < result.log.length && (isLastFrame || result.log[i].t <= frameTimeEnd)){ i++; }
+    if(i === startI){
+      // 이번 시간 구간에는 아직 새로 기록된 로그가 없다(로그 밀도가 낮은 구간) - 지연 없이 바로 다음 구간으로.
+      setTimeout(step, 0);
+      return;
+    }
+    for(let j=startI; j<i; j++){
       const entry = result.log[j];
       const l = document.createElement('div'); l.className=entry.cls; l.textContent=entry.text; logEl.appendChild(l);
     }
     logEl.scrollTop = logEl.scrollHeight;
     while(logEl.childNodes.length > 50) logEl.removeChild(logEl.firstChild);
-    const entry = result.log[nextI-1];
+    const entry = result.log[i-1];
     const enHpEl = document.getElementById('raidEnHp'); if(enHpEl) enHpEl.style.width = clamp((entry.enHp/raidRun.enemy.maxHp)*100,0,100)+'%';
     const myHpEl = document.getElementById('raidMyHp'); if(myHpEl) myHpEl.style.width = clamp((entry.myHp/raidRun.playerStats.hp)*100,0,100)+'%';
     const myHpText = document.getElementById('raidMyHpText'); if(myHpText) myHpText.textContent = `${Math.round(Math.max(0,entry.myHp))}/${raidRun.playerStats.hp}`;
     const myManaEl = document.getElementById('raidMyMana'); if(myManaEl) myManaEl.style.width = clamp((entry.mana/raidRun.playerStats.maxMana)*100,0,100)+'%';
     const myManaText = document.getElementById('raidMyManaText'); if(myManaText) myManaText.textContent = `${Math.round(Math.max(0,entry.mana))}/${raidRun.playerStats.maxMana}`;
     renderStatusIcons('raidStatus', null, entry);
-    // 이번 프레임의 애니메이션 진행률만큼 추가 파티원의 시간도 함께 흐르게 한다.
-    const frameProgress = nextI / result.log.length;
-    const interpElapsed = raidChunkStartElapsed + (raidChunkEndElapsed - raidChunkStartElapsed) * frameProgress;
-    updateRaidExtraPartyReveal(interpElapsed / EXPED_CONFIG.RAID_TIME_LIMIT_SEC);
-    i = nextI; setTimeout(step, 90);
+    // 추가 파티원도 정확히 이 로그 항목이 기록된 실제 경과시간(entry.t) 기준으로 함께 진행시킨다.
+    updateRaidExtraPartyReveal(entry.t / EXPED_CONFIG.RAID_TIME_LIMIT_SEC);
+    setTimeout(step, 90);
   }
   step();
 }
@@ -12478,8 +12491,8 @@ function renderMiningExpeditionSub(){
       <div class="shop-rate" data-exp-remain="${e.id}">${done?'탐험 완료!' : '남은 시간 '+fmtDuration(remain)}</div>
       <button class="btn ${done?'btn-primary':'btn-secondary'} btn-block" data-collect-exp="${e.id}" ${done?'':'disabled'}>${done?'보상 수령':'진행 중...'}</button>
       ${!done ? `<div style="display:flex;gap:4px;margin-top:4px;">
-        <button class="btn-icon" data-boost-exp="${e.id}" style="flex:1;" ${boostDisabled?'disabled':''}>부스트 1개 (보유 ${m.boostEnergy})</button>
-        <button class="btn-icon" data-boost-exp-all="${e.id}" style="flex:1;" ${boostDisabled?'disabled':''}>전체 사용</button>
+        <button class="btn-icon" data-boost-exp="${e.id}" style="flex:1;max-width:none;" ${boostDisabled?'disabled':''}>부스트 1개 (보유 ${m.boostEnergy})</button>
+        <button class="btn-icon" data-boost-exp-all="${e.id}" style="flex:1;max-width:none;" ${boostDisabled?'disabled':''}>전체 사용</button>
       </div>
       <div style="font-size:9.5px;color:var(--text-dim);margin-top:3px;">부스트로 단축한 시간: ${fmtDuration(e.boostReducedMs||0)}</div>` : ''}
     </div>`;

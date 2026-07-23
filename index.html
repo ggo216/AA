@@ -6192,6 +6192,7 @@ function renderSkills(){
         <div class="skill-bottom-row">
           <div class="skill-effect" title="${escapeHtml(def.desc)}">${lv===0 ? `+ ${def.effectText(1)}` : def.effectText(lv)}</div>
           <button class="btn btn-primary btn-learn-sm" data-skill="${key}" ${disabled?'disabled':''}>${btnLabel}</button>
+          ${!isMax && !locked ? `<button class="btn-icon" data-skill-max="${key}" ${state.skillPoints<1?'disabled':''} title="보유한 스킬 포인트를 이 스킬에 소진될 때까지(또는 MAX까지) 한번에 투자합니다">MAX까지</button>` : ''}
         </div>
         ${enhanceRow}
         ${gemEnhanceRow}
@@ -6210,6 +6211,7 @@ function renderSkills(){
     '<div class="section-label" style="margin-top:16px;">액티브 스킬 (마나 소모)</div><div class="skill-grid">' + (actives.map(cardHtml).join('') || '<div style="font-size:12px;color:var(--text-dim);">표시할 액티브 스킬이 없습니다.</div>') + '</div>';
 
   document.getElementById('skillList').querySelectorAll('button[data-skill]').forEach(btn=> btn.addEventListener('click', ()=> learnSkill(btn.dataset.skill)));
+  document.getElementById('skillList').querySelectorAll('button[data-skill-max]').forEach(btn=> btn.addEventListener('click', ()=> learnSkillMax(btn.dataset.skillMax)));
   document.getElementById('skillList').querySelectorAll('button[data-skill-enhance]').forEach(btn=> btn.addEventListener('click', ()=> enhanceTier4Skill(btn.dataset.skillEnhance)));
   document.getElementById('skillList').querySelectorAll('button[data-skill-enhance-bulk]').forEach(btn=> btn.addEventListener('click', ()=> bulkEnhanceTier4Skill(btn.dataset.skillEnhanceBulk)));
   document.getElementById('skillList').querySelectorAll('button[data-skill-gem-enhance]').forEach(btn=> btn.addEventListener('click', ()=> gemEnhanceSkill(btn.dataset.skillGemEnhance)));
@@ -9609,6 +9611,26 @@ function learnSkill(key){
   state.skillPoints -= 1;
   state.skills[key] = lv+1;
   showToast(`${def.name} Lv.${state.skills[key]} 습득!`);
+  renderAll();
+}
+// [신규] 보유한 스킬 포인트가 소진되거나 해당 스킬이 MAX 레벨에 도달할 때까지, 한 번의 클릭으로
+// 스킬 레벨을 한 번에 최대까지 올린다 (펫 스킬의 "MAX까지" 버튼과 동일한 패턴).
+function learnSkillMax(key){
+  const def = SKILL_DEFS[key];
+  if(def.job && def.job !== state.job){ showToast('해당 직업 전용 스킬입니다', true); return; }
+  if(def.reqRank && (state.jobRank||1) < def.reqRank){ showToast(`${jobRankTitle(state.job, def.reqRank)} 전직 이후 배울 수 있습니다`, true); return; }
+  if(state.level < def.unlockLv){ showToast(`레벨 ${def.unlockLv} 이상 필요합니다`, true); return; }
+  let lv = state.skills[key]||0;
+  if(lv >= def.maxLevel){ showToast('이미 최대 레벨입니다', true); return; }
+  if(state.skillPoints < 1){ showToast('스킬 포인트가 부족합니다', true); return; }
+  let used = 0;
+  while(state.skillPoints > 0 && lv < def.maxLevel){
+    state.skillPoints -= 1;
+    lv += 1;
+    used += 1;
+  }
+  state.skills[key] = lv;
+  showToast(`${def.name} Lv.${lv} 까지 습득! (포인트 ${used} 사용)`);
   renderAll();
 }
 

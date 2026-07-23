@@ -9664,7 +9664,11 @@ function gainExp(amount, opts){
     state.exp -= expNeeded(state.level);
     state.level += 1;
     state.gems += 25;
-    state.skillPoints += 2; // 4차 전직(레벨 120) 도입으로 스킬 종류가 늘어난 만큼, 레벨업당 스킬포인트를 2로 상향
+    // [버그 수정] 한 직업(공통 스킬 + 직업 전용 + 4차/5차 계열 스킬)의 모든 스킬을 MAX까지 찍는 데 필요한
+    // 총 포인트를 계산해보니 825인데, 레벨업당 2포인트씩이면 1~300레벨 동안 최대 598포인트밖에 못 벌어서
+    // 끝까지 성장해도 절대 모든 스킬을 MAX로 찍을 수 없었다(약 227포인트 부족). 3포인트로 올려서
+    // 최대 897포인트를 벌 수 있게 해, 300레벨에 모든 스킬을 MAX까지 찍을 수 있도록 수정.
+    state.skillPoints += 3;
     levelsGained += 1;
     if(state.level >= MAX_LEVEL){ state.exp = 0; break; }
   }

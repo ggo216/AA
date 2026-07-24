@@ -2928,9 +2928,26 @@ async function storageGet(key){
   }
   return null;
 }
+// [성능/안정성 보강] 브라우저 localStorage는 보통 5~10MB 한도가 있는데, 인벤토리/펫/장비/물고기/동물 등이
+// 장시간 플레이하며 계속 쌓이면(렌더링은 페이지네이션했지만 실제 저장되는 데이터 자체는 여전히 무제한) 언젠가
+// 한도를 초과해 setItem이 예외를 던질 수 있다. 기존에는 이 예외가 saveSlot의 catch까지만 전파되고 "저장 실패"
+// 토스트만 떴는데, 한도에 근접했을 때 미리 경고해서 사용자가 저장이 완전히 막히기 전에 미리 정리(판매/분해)할
+// 기회를 주도록 사이즈 임계값 경고를 추가한다.
+const STORAGE_SIZE_WARN_BYTES = 4.5 * 1024 * 1024; // 대부분의 브라우저 5MB 한도의 90% 지점에서 미리 경고
+let storageSizeWarnedAt = 0; // 같은 세션에서 토스트 스팸을 막기 위한 마지막 경고 시각
 async function storageSet(key, value){
   if(storageBackend === 'native') return window.storage.set(key, value, false);
-  if(storageBackend === 'local') window.localStorage.setItem(LS_PREFIX+key, value);
+  if(storageBackend === 'local'){
+    if(typeof value === 'string' && value.length > STORAGE_SIZE_WARN_BYTES){
+      const now = Date.now();
+      if(now - storageSizeWarnedAt > 5*60*1000){ // 5분에 한 번만 경고
+        storageSizeWarnedAt = now;
+        console.warn(`[storage] 저장 데이터 크기가 큽니다 (${Math.round(value.length/1024/1024*10)/10}MB) - 브라우저 저장 한도에 근접하면 저장이 실패할 수 있습니다.`);
+        if(typeof showToast === 'function') showToast('저장 용량이 커지고 있습니다. 불필요한 아이템을 정리(판매/분해)하는 것을 권장합니다.', true);
+      }
+    }
+    window.localStorage.setItem(LS_PREFIX+key, value);
+  }
 }
 async function storageDelete(key){
   if(storageBackend === 'native') return window.storage.delete(key, false);
@@ -3531,6 +3548,34 @@ function bulkCleanupFarmMaterials(gradeKey){
   const water = Math.floor(consumed / 3);
   mat.water = (mat.water||0) + water;
   return { ok:true, consumed, water };
+}
+// [신규] 씨앗도 던전 등에서 조금씩 쌓이는데 심는 것 외에는 활용처가 없다는 요청에 따라, 보유한 씨앗 전체를
+// 등급에 비례한 보석으로 일괄 판매하는 기능을 추가한다. (나무는 농장 강화 재료로 계속 필요하므로 대상에서 제외)
+const SEED_SELL_GEM_BASE = 8;
+function farmSeedSellGemTotal(){
+  const mat = state.farm.materials;
+  let total = 0;
+  FARM_SEED_TYPES.forEach(typeKey=>{
+    const typeObj = mat.seed[typeKey];
+    if(!typeObj) return;
+    RARITY_ORDER.forEach(g=>{
+      const cnt = typeObj[g]||0;
+      if(cnt>0) total += Math.round(cnt * SEED_SELL_GEM_BASE * (RARITY_MULT[g]||1));
+    });
+  });
+  return total;
+}
+function sellAllFarmSeedsForGems(){
+  const mat = state.farm.materials;
+  const gemGain = farmSeedSellGemTotal();
+  if(gemGain<=0) return { ok:false, gemGain:0 };
+  FARM_SEED_TYPES.forEach(typeKey=>{
+    const typeObj = mat.seed[typeKey];
+    if(!typeObj) return;
+    RARITY_ORDER.forEach(g=>{ typeObj[g] = 0; });
+  });
+  state.gems += gemGain;
+  return { ok:true, gemGain };
 }
 // 농장 레벨업에 필요한 재료량(레벨이 오를수록 증가하는 무한 강화 공식).
 function farmUpgradeCost(level){
@@ -4834,6 +4879,12 @@ function renderFarmTab(){
   if(farmSubTab==='ranch') renderRanchSub();
 }
 // 사육장 서브탭: 레벨/강화, 배치 동물 목록, 미배치 동물 목록, 보너스%, 미수거 보상 표시.
+// [성능 버그 수정] 수족관과 동일한 패턴: 미배치 동물(unplaced)은 배치 정원(cap)과 달리 총 보유 수에
+// 상한이 없어(던전에서 동물 주문서로 계속 획득) 목록이 커질수록 renderAll()이 호출될 때마다(사육장 탭이
+// 열려있으면 매번) 전체를 innerHTML로 다시 그려 렉이 발생할 수 있었다. 인벤토리/수족관과 동일한
+// 페이지네이션 패턴을 적용한다.
+const RANCH_PAGE_SIZE = 40;
+let ranchUnplacedRenderLimit = RANCH_PAGE_SIZE;
 function renderRanchSub(){
   tickRanchProduction(); // 화면 진입 시 최신 누적 보상을 먼저 계산한다
   const box = document.getElementById('farmSubRanch');
@@ -4845,7 +4896,9 @@ function renderRanchSub(){
   const canUpgrade = haveBrick >= cost;
   const bonusPct = ranchBonusPct();
   const placed = ranch.animals.filter(a=>a.placed);
-  const unplaced = ranch.animals.filter(a=>!a.placed);
+  const unplacedFull = ranch.animals.filter(a=>!a.placed);
+  const unplaced = unplacedFull.slice(0, ranchUnplacedRenderLimit);
+  const unplacedRemaining = unplacedFull.length - unplaced.length;
   const pendingGold = Math.floor(ranch.pendingGold), pendingExp = Math.floor(ranch.pendingExp), pendingGems = Math.floor(ranch.pendingGems);
   const canHarvest = pendingGold>0 || pendingExp>0 || pendingGems>0;
   const animalCardHtml = (a, placedCard)=>{
@@ -4871,7 +4924,7 @@ function renderRanchSub(){
     ? `<div class="farm-plot-grid">${placed.map(a=>animalCardHtml(a,true)).join('')}</div>`
     : `<div style="font-size:11px;color:var(--text-dim);padding:8px 0;">배치된 동물이 없습니다.</div>`;
   const unplacedHtml = unplaced.length
-    ? `<div class="farm-plot-grid">${unplaced.map(a=>animalCardHtml(a,false)).join('')}</div>`
+    ? `<div class="farm-plot-grid">${unplaced.map(a=>animalCardHtml(a,false)).join('')}</div>${unplacedRemaining>0 ? `<button class="btn btn-secondary" id="ranchUnplacedLoadMoreBtn" style="width:100%;margin-top:6px;padding:6px 10px;font-size:10.5px;">더 보기 (${unplacedRemaining.toLocaleString()}마리 남음)</button>` : ''}`
     : `<div style="font-size:11px;color:var(--text-dim);padding:8px 0;">보유한 미배치 동물이 없습니다. 던전에서 동물 주문서를 얻어 사용해보세요.</div>`;
   // [신규] 동물 주문서(kind:'animalScroll')를 가방까지 이동하지 않고 사육장 화면에서 바로 사용할 수 있도록,
   // 등급별 보유 개수를 집계해 표시하고 각 등급마다 "사용" 버튼을 제공한다.
@@ -4889,7 +4942,10 @@ function renderRanchSub(){
             <span class="rarity-tag ${rarity.cls}" style="white-space:nowrap;flex-shrink:0;">${rarity.label}</span>
             <span style="font-weight:700;font-size:12px;white-space:nowrap;">${FARM_ICON_SVG.scroll} 동물 주문서</span>
           </div>
-          <button class="btn btn-primary" style="margin-top:6px;font-size:10.5px;padding:4px 8px;" data-ranch-use-scroll="${g}">사용</button>
+          <div style="display:flex;gap:4px;margin-top:6px;">
+            <button class="btn btn-primary" style="flex:1;font-size:10.5px;padding:4px 6px;" data-ranch-use-scroll="${g}">사용</button>
+            <button class="btn btn-danger" style="flex:1;font-size:10.5px;padding:4px 6px;" data-ranch-sell-scroll="${g}">${FARM_ICON_SVG.gem} 전체판매(${(animalScrollSellGemValue(g)*cnt).toLocaleString()})</button>
+          </div>
         </div>`;
       }).join('')}</div>`
     : `<div style="font-size:11px;color:var(--text-dim);padding:8px 0;">보유한 동물 주문서가 없습니다. 던전에서 낮은 확률로 드롭됩니다.</div>`;
@@ -4937,6 +4993,8 @@ function renderRanchSub(){
     showToast(msg);
     renderAll();
   });
+  const ranchUnplacedLoadMoreBtn = document.getElementById('ranchUnplacedLoadMoreBtn');
+  if(ranchUnplacedLoadMoreBtn) ranchUnplacedLoadMoreBtn.addEventListener('click', ()=>{ ranchUnplacedRenderLimit += RANCH_PAGE_SIZE; renderRanchSub(); });
   box.querySelectorAll('[data-ranch-place]').forEach(btn=>{
     btn.addEventListener('click', ()=>{
       const res = placeAnimal(btn.dataset.ranchPlace);
@@ -4963,6 +5021,19 @@ function renderRanchSub(){
       const item = state.inventory.find(i=> i.kind==='animalScroll' && i.rarityKey===rarityKey);
       if(!item){ showToast('사용할 동물 주문서를 찾을 수 없습니다', true); renderFarmTab(); return; }
       useAnimalScroll(item.id);
+    });
+  });
+  box.querySelectorAll('[data-ranch-sell-scroll]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const rarityKey = btn.dataset.ranchSellScroll;
+      const targets = state.inventory.filter(i=> i.kind==='animalScroll' && i.rarityKey===rarityKey);
+      if(!targets.length){ showToast('판매할 동물 주문서를 찾을 수 없습니다', true); renderFarmTab(); return; }
+      const gemGain = targets.reduce((sum,i)=> sum + animalScrollSellGemValue(i.rarityKey), 0);
+      const targetIds = new Set(targets.map(i=>i.id));
+      state.inventory = state.inventory.filter(i=> !targetIds.has(i.id));
+      state.gems += gemGain;
+      showToast(`${RARITY_BY_KEY[rarityKey].label} 동물 주문서 ${targets.length}개 판매 (+${gemGain.toLocaleString()} 보석)`);
+      renderAll();
     });
   });
 }
@@ -5025,6 +5096,7 @@ function farmMaterialSummaryHtml(){
     <div style="display:flex;align-items:center;gap:6px;margin-top:6px;flex-wrap:wrap;">
       <select id="farmCleanupGradeSelect" class="rarity-select">${gradeOptions}</select>
       <button class="btn btn-secondary" id="farmBulkCleanupBtn" title="선택한 등급 이하의 씨앗/나무 재료를 3개당 물 1개로 일괄 정리합니다" style="font-size:9.5px;padding:4px 8px;">🧹 재료 정리 (→물)</button>
+      <button class="btn btn-danger" id="farmSellSeedsBtn" title="보유한 모든 씨앗을 등급에 비례한 보석으로 일괄 판매합니다 (나무는 대상에서 제외)" style="font-size:9.5px;padding:4px 8px;" ${seedTotal>0?'':'disabled'}>${FARM_ICON_SVG.gem} 씨앗 전체 판매 (${farmSeedSellGemTotal().toLocaleString()})</button>
     </div>`;
 }
 
@@ -5211,6 +5283,11 @@ function renderSpiritInfoSub(){
   renderEssencePanel('spiritEssencePanel');
 }
 let spiritGearFilter = 'all'; // 정령 장비 탭 등급 필터: all/common/rare/epic/legendary/mythic
+// [성능 버그 수정] 정령 장비 가방도 수족관/사육장/광산과 같은 문제: 레이드 드롭으로 총량 제한 없이
+// 쌓이는데, 카드마다 computeTotals()를 한 번씩(장착 시뮬레이션) 호출하며 전체를 매번 다시 그렸다.
+// 페이지네이션으로 한 번에 계산/렌더링하는 카드 수를 제한한다.
+const SPIRIT_GEAR_PAGE_SIZE = 40;
+let spiritGearRenderLimit = SPIRIT_GEAR_PAGE_SIZE;
 function renderSpiritGearSub(){
   const eqBox = document.getElementById('spiritEquippedBox');
   const bagBox = document.getElementById('spiritBagBox');
@@ -5242,14 +5319,17 @@ function renderSpiritGearSub(){
     .map(([k,label])=> `<button class="${spiritGearFilter===k?'active':''}" data-spirit-filter="${k}">${label}</button>`).join('');
   const filterBar = state.spiritGear.length ? `<div class="inv-filter" style="margin-bottom:6px;">${spiritFilterTabs}</div>` : '';
   // 등급 높은 장비가 위로 오도록 정렬해 좋은 장비를 바로 찾을 수 있게 한다
-  const sortedGear = [...state.spiritGear]
+  const sortedGearFull = [...state.spiritGear]
     .filter(g=> spiritGearFilter==='all' || g.rarityKey===spiritGearFilter)
     .sort((a,b)=> (RARITY_MULT[b.rarityKey]||0) - (RARITY_MULT[a.rarityKey]||0));
+  const sortedGear = sortedGearFull.slice(0, spiritGearRenderLimit);
+  const spiritGearRemaining = sortedGearFull.length - sortedGear.length;
   // [최적화] 예전에는 목록의 아이템마다 computeTotals()를 "장착 전/후" 두 번씩 호출해, 가방에 아이템이
   // 많을수록 렌더링할 때마다 전체 전투력 계산이 항목 수의 2배만큼 반복됐다(장착 전 CP는 매번 동일한 값인데도
-  // 매번 다시 계산했다). 장착 전 기준 CP는 목록을 그리기 전에 딱 한 번만 계산해두고 재사용한다.
-  const baseSpiritCP = computeTotals().cp;
-  const baseSpiritAtk = computeTotals().atk;
+  // 매번 다시 계산했다). 장착 전 기준 CP는 목록을 그리기 전에 딱 한 번만 계산해두고 재사용한다(CP/ATK 공통).
+  const baseSpiritTotals = computeTotals();
+  const baseSpiritCP = baseSpiritTotals.cp;
+  const baseSpiritAtk = baseSpiritTotals.atk;
   const gearCards = sortedGear.map(g=>{
     const rarity = RARITY_BY_KEY[g.rarityKey]||{};
     const equippedForSlot = state.spirit.equipment[g.slotType];
@@ -5276,11 +5356,14 @@ function renderSpiritGearSub(){
       </div>
     </div>`;
   }).join('');
-  bagBox.innerHTML = filterBar + bulkCard + (gearCards || (state.spiritGear.length ? '<div class="inv-empty">선택한 등급의 정령 장비가 없습니다.</div>' : '<div class="inv-empty">보유한 정령 장비가 없습니다.<br>전투를 통해 획득할 수 있습니다.</div>'));
-  bagBox.querySelectorAll('[data-spirit-filter]').forEach(btn=> btn.addEventListener('click', ()=>{ spiritGearFilter = btn.dataset.spiritFilter; renderSpiritGearSub(); }));
+  const spiritLoadMoreHtml = spiritGearRemaining>0 ? `<button class="btn btn-secondary" id="spiritGearLoadMoreBtn" style="width:100%;margin-top:6px;padding:6px 10px;font-size:10.5px;">더 보기 (${spiritGearRemaining.toLocaleString()}개 남음)</button>` : '';
+  bagBox.innerHTML = filterBar + bulkCard + (gearCards || (state.spiritGear.length ? '<div class="inv-empty">선택한 등급의 정령 장비가 없습니다.</div>' : '<div class="inv-empty">보유한 정령 장비가 없습니다.<br>전투를 통해 획득할 수 있습니다.</div>')) + spiritLoadMoreHtml;
+  bagBox.querySelectorAll('[data-spirit-filter]').forEach(btn=> btn.addEventListener('click', ()=>{ spiritGearFilter = btn.dataset.spiritFilter; spiritGearRenderLimit = SPIRIT_GEAR_PAGE_SIZE; renderSpiritGearSub(); }));
   bagBox.querySelectorAll('[data-spirit-bulk]').forEach(btn=> btn.addEventListener('click', ()=> bulkSellSpiritGear(btn.dataset.spiritBulk)));
   bagBox.querySelectorAll('[data-spirit-equip]').forEach(btn=> btn.addEventListener('click', ()=> equipSpiritGear(btn.dataset.spiritEquip)));
   bagBox.querySelectorAll('[data-spirit-sell]').forEach(btn=> btn.addEventListener('click', ()=> sellSpiritGear(btn.dataset.spiritSell)));
+  const spiritGearLoadMoreBtn = document.getElementById('spiritGearLoadMoreBtn');
+  if(spiritGearLoadMoreBtn) spiritGearLoadMoreBtn.addEventListener('click', ()=>{ spiritGearRenderLimit += SPIRIT_GEAR_PAGE_SIZE; renderSpiritGearSub(); });
 }
 /* ---- 낚시(Fishing) 탭 렌더링 ---- */
 let fishingSubTab = 'cast';
@@ -5369,6 +5452,13 @@ function fishCardHtml(fish, opts){
   </div>`;
 }
 let fishTankFilter = 'all'; // 낚시 어항 탭 등급 필터: all/common/rare/epic/legendary/mythic
+// [성능 버그 수정] 수족관 탭은 인벤토리 탭(invRenderLimit 페이지네이션)과 달리 보유 물고기 목록 전체를
+// 제한 없이 매번 innerHTML로 통째로 다시 그리고 있었다. 낚시로 물고기가 수백~수천 마리씩 쌓이는 게
+// 정상적인 플레이 패턴인데, renderAll()이 호출될 때마다(다른 탭에서 아무 행동을 해도 수족관 탭이 열려
+// 있으면 매번) 그 많은 카드를 전부 새로 그려서 극심한 렉이 발생했다. 인벤토리와 동일한 페이지네이션
+// 패턴(더 보기 버튼)을 적용해 한 번에 그리는 카드 수를 제한한다.
+const FISH_PAGE_SIZE = 40;
+let fishInvRenderLimit = FISH_PAGE_SIZE;
 function renderFishTankSub(){
   const box = document.getElementById('fishingSubTank');
   if(!box) return;
@@ -5384,7 +5474,9 @@ function renderFishTankSub(){
   const tankFullList = [...state.fishing.tank].sort((a,b)=> (RARITY_MULT[b.rarityKey]||1)-(RARITY_MULT[a.rarityKey]||1));
   const tank = tankFullList.filter(f=> fishTankFilter==='all' || f.rarityKey===fishTankFilter);
   const invFullList = [...state.fishInventory].sort((a,b)=> (RARITY_MULT[b.rarityKey]||1)-(RARITY_MULT[a.rarityKey]||1));
-  const inv = invFullList.filter(f=> fishTankFilter==='all' || f.rarityKey===fishTankFilter);
+  const invFiltered = invFullList.filter(f=> fishTankFilter==='all' || f.rarityKey===fishTankFilter);
+  const inv = invFiltered.slice(0, fishInvRenderLimit);
+  const invRemaining = invFiltered.length - inv.length;
   box.innerHTML = `
     ${filterBar}
     <div class="pet-total-summary">
@@ -5398,7 +5490,7 @@ function renderFishTankSub(){
       ${tank.length ? tank.map(f=> fishCardHtml(f, {inTank:true})).join('') : `<div class="inv-empty">${tankFullList.length ? '선택한 등급의 물고기가 수족관에 없습니다.' : '수족관이 비어있습니다.<br>낚은 물고기를 넣어보세요.'}</div>`}
     </div>
     <div class="section-label" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;">
-      <span>보유 물고기 (${inv.length}/${invFullList.length})</span>
+      <span>보유 물고기 (${invFiltered.length}/${invFullList.length})</span>
       <div style="display:flex;gap:6px;flex-wrap:wrap;">
         <button class="btn-icon" id="fishSellAllBtn" style="font-size:10.5px;padding:3px 8px;" ${invFullList.length?'':'disabled'}>전체 일괄 판매</button>
         <button class="btn-icon" id="fishSellFilterOnlyBtn" style="font-size:10.5px;padding:3px 8px;" ${(fishTankFilter!=='all' && inv.length)?'':'disabled'}>선택 등급만 판매${fishTankFilter!=='all'?` (${RARITY_BY_KEY[fishTankFilter].label})`:''}</button>
@@ -5407,11 +5499,14 @@ function renderFishTankSub(){
     </div>
     <div class="fish-card-grid" style="max-height:280px;overflow-y:auto;">
       ${inv.length ? inv.map(f=> fishCardHtml(f, {inTank:false, tankFull: tankFullList.length>=cap})).join('') : `<div class="inv-empty">${invFullList.length ? '선택한 등급의 물고기가 없습니다.' : '보유한 물고기가 없습니다.<br>낚시하기에서 물고기를 잡아보세요.'}</div>`}
+      ${invRemaining>0 ? `<button class="btn btn-secondary" id="fishLoadMoreBtn" style="grid-column:1/-1;padding:6px 10px;font-size:10.5px;">더 보기 (${invRemaining.toLocaleString()}마리 남음)</button>` : ''}
     </div>
   `;
   const lvBtn = document.getElementById('aquariumLevelUpBtn');
   if(lvBtn) lvBtn.addEventListener('click', ()=> levelUpAquarium());
-  box.querySelectorAll('[data-fish-filter]').forEach(btn=> btn.addEventListener('click', ()=>{ fishTankFilter = btn.dataset.fishFilter; renderFishTankSub(); }));
+  const fishLoadMoreBtn = document.getElementById('fishLoadMoreBtn');
+  if(fishLoadMoreBtn) fishLoadMoreBtn.addEventListener('click', ()=>{ fishInvRenderLimit += FISH_PAGE_SIZE; renderFishTankSub(); });
+  box.querySelectorAll('[data-fish-filter]').forEach(btn=> btn.addEventListener('click', ()=>{ fishTankFilter = btn.dataset.fishFilter; fishInvRenderLimit = FISH_PAGE_SIZE; renderFishTankSub(); }));
   box.querySelectorAll('[data-fish-place]').forEach(btn=> btn.addEventListener('click', ()=> placeFishInTank(btn.dataset.fishPlace)));
   box.querySelectorAll('[data-fish-remove]').forEach(btn=> btn.addEventListener('click', ()=> removeFishFromTank(btn.dataset.fishRemove)));
   box.querySelectorAll('[data-fish-sell-inv]').forEach(btn=> btn.addEventListener('click', ()=> sellFish(btn.dataset.fishSellInv, false)));
@@ -5449,17 +5544,25 @@ function renderFishGearSub(){
 // "펫장비" 탭: 보유한 모든 펫 장비를 등급순으로 모아서 보여준다
 // [신규] 등급별 필터: 정령 장비 탭(spiritGearFilter, renderSpiritGearSub)과 동일한 inv-filter 패턴을 재사용한다.
 let petGearFilter = 'all'; // 펫 장비 탭 등급 필터: all/common/rare/epic/legendary/mythic
+// [성능 버그 수정] 펫 장비도 상점 상자에서 총량 제한 없이 쌓이는데 매번 전체를 다시 그렸다. 페이지네이션 적용.
+const PET_GEAR_LIST_PAGE_SIZE = 40;
+let petGearListRenderLimit = PET_GEAR_LIST_PAGE_SIZE;
 function renderPetGearListSub(){
   const box = document.getElementById('petGearListBox');
   if(!box) return;
   const fullGear = [...state.inventory.filter(i=>i.kind==='petgear')].sort((a,b)=> RARITY_MULT[b.rarityKey]-RARITY_MULT[a.rarityKey]);
-  const gear = fullGear.filter(g=> petGearFilter==='all' || g.rarityKey===petGearFilter);
+  const filteredGear = fullGear.filter(g=> petGearFilter==='all' || g.rarityKey===petGearFilter);
+  const gear = filteredGear.slice(0, petGearListRenderLimit);
+  const petGearListRemaining = filteredGear.length - gear.length;
   const petFilterTabs = [['all','전체'],['common','일반'],['rare','희귀'],['epic','영웅'],['legendary','전설'],['mythic','신화']]
     .map(([k,label])=> `<button class="${petGearFilter===k?'active':''}" data-pet-gear-filter="${k}">${label}</button>`).join('');
   const filterBar = fullGear.length ? `<div class="inv-filter" style="margin-bottom:6px;">${petFilterTabs}</div>` : '';
   const cards = gear.length ? gear.map(renderPetGearCard).join('') : (fullGear.length ? '<div class="inv-empty">선택한 등급의 펫 장비가 없습니다.</div>' : '<div class="inv-empty">보유한 펫 장비가 없습니다.<br>상점에서 장비 상자를 구매해보세요.</div>');
-  box.innerHTML = filterBar + cards;
-  box.querySelectorAll('[data-pet-gear-filter]').forEach(btn=> btn.addEventListener('click', ()=>{ petGearFilter = btn.dataset.petGearFilter; renderPetGearListSub(); }));
+  const loadMoreHtml = petGearListRemaining>0 ? `<button class="btn btn-secondary" id="petGearListLoadMoreBtn" style="width:100%;margin-top:6px;padding:6px 10px;font-size:10.5px;">더 보기 (${petGearListRemaining.toLocaleString()}개 남음)</button>` : '';
+  box.innerHTML = filterBar + cards + loadMoreHtml;
+  box.querySelectorAll('[data-pet-gear-filter]').forEach(btn=> btn.addEventListener('click', ()=>{ petGearFilter = btn.dataset.petGearFilter; petGearListRenderLimit = PET_GEAR_LIST_PAGE_SIZE; renderPetGearListSub(); }));
+  const petGearListLoadMoreBtn = document.getElementById('petGearListLoadMoreBtn');
+  if(petGearListLoadMoreBtn) petGearListLoadMoreBtn.addEventListener('click', ()=>{ petGearListRenderLimit += PET_GEAR_LIST_PAGE_SIZE; renderPetGearListSub(); });
 }
 // 펫장비 일괄판매: 보유(미착용) 펫장비 중 일반/희귀 등급(저등급)만 한번에 판매한다. (착용 중인 펫장비는 인벤토리에 없으므로 대상에서 자동 제외됨)
 const PET_GEAR_BULK_SELL_MAX_RARITY = 'rare'; // 이 등급 이하만 일괄판매 대상
@@ -5594,22 +5697,30 @@ function renderPetEquippedOverview(){
     btn.addEventListener('click', ()=> unequipPet(btn.dataset.petUnequipQuick));
   });
 }
+// [성능 버그 수정] 펫도 소환을 반복하면 총량 제한 없이 계속 쌓일 수 있어 동일한 페이지네이션을 적용한다.
+const PET_LIST_PAGE_SIZE = 40;
+let petListRenderLimit = PET_LIST_PAGE_SIZE;
 function renderPetListSub(){
   const listBox = document.getElementById('petListBox');
   const countEl = document.getElementById('petEquippedCount');
   if(!listBox) return;
   const equippedIds = state.equippedPets||[];
   // 장착 중인 펫을 목록 맨 앞으로 정렬해 관리하기 쉽게 함
-  const pets = [...(state.pets||[])].sort((a,b)=>{
+  const petsFull = [...(state.pets||[])].sort((a,b)=>{
     const ea = equippedIds.includes(a.id) ? 1 : 0;
     const eb = equippedIds.includes(b.id) ? 1 : 0;
     if(ea !== eb) return eb - ea;
     return b.level - a.level;
   });
+  const pets = petsFull.slice(0, petListRenderLimit);
+  const petListRemaining = petsFull.length - pets.length;
   if(countEl) countEl.textContent = equippedIds.length;
-  listBox.innerHTML = pets.length
+  const petLoadMoreHtml = petListRemaining>0 ? `<button class="btn btn-secondary" id="petListLoadMoreBtn" style="grid-column:1/-1;padding:6px 10px;font-size:10.5px;">더 보기 (${petListRemaining.toLocaleString()}마리 남음)</button>` : '';
+  listBox.innerHTML = (pets.length
     ? pets.map(petCardHtml).join('')
-    : '<div style="font-size:12px;color:var(--text-dim);padding:10px 0;text-align:center;grid-column:1/-1;">보유한 펫이 없습니다. 상점 탭에서 펫을 소환해보세요!</div>';
+    : '<div style="font-size:12px;color:var(--text-dim);padding:10px 0;text-align:center;grid-column:1/-1;">보유한 펫이 없습니다. 상점 탭에서 펫을 소환해보세요!</div>') + petLoadMoreHtml;
+  const petListLoadMoreBtn = document.getElementById('petListLoadMoreBtn');
+  if(petListLoadMoreBtn) petListLoadMoreBtn.addEventListener('click', ()=>{ petListRenderLimit += PET_LIST_PAGE_SIZE; renderPetListSub(); });
   listBox.querySelectorAll('[data-pet-select]').forEach(card=>{
     card.addEventListener('click', (e)=>{
       if(e.target.closest('[data-pet-quick-toggle]')) return; // 빠른 착용/해제 버튼 클릭은 선택으로 취급하지 않음
@@ -7515,6 +7626,14 @@ function sellEquippedItem(slotKey){
   }
 }
 const CONFIRM_RARITY_KEYS = ['epic','legendary','mythic'];
+// [신규] 농장 주문서(동물 주문서, kind:'animalScroll')는 던전에서 낮은 확률로만 드롭되는 귀한 재료라
+// 다른 소모품과 같은 낮은 골드 시세(15*등급배율)로 팔리는 게 아쉽다는 요청에 따라, 훨씬 비싼 보석 시세로
+// 별도 판매하도록 한다. 사육장에서 동물로 바꿔 배치해 얻는 것보다는 낮지만(동물 1마리 = ANIMAL_SELL_GEM_BASE=15),
+// "바로 팔아버리는" 선택지로도 충분히 매력적이도록 동물 판매가보다 약간 높게 책정한다.
+const ANIMAL_SCROLL_SELL_GEM_BASE = 25;
+function animalScrollSellGemValue(rarityKey){
+  return Math.round(ANIMAL_SCROLL_SELL_GEM_BASE * (RARITY_MULT[rarityKey]||1));
+}
 function sellItem(id){
   const idx = state.inventory.findIndex(i=>i.id===id);
   if(idx === -1) return;
@@ -7523,6 +7642,14 @@ function sellItem(id){
     const curIdx = state.inventory.findIndex(i=>i.id===id);
     if(curIdx === -1) return;
     const it = state.inventory[curIdx];
+    if(it.kind === 'animalScroll'){
+      const gemGain = animalScrollSellGemValue(it.rarityKey);
+      state.inventory.splice(curIdx,1);
+      state.gems += gemGain;
+      showToast(it.name + ' 판매 (+' + gemGain.toLocaleString() + ' 보석)');
+      renderAll();
+      return;
+    }
     let price;
     if(it.kind) price = Math.round(15 * RARITY_MULT[it.rarityKey]);
     else price = Math.round(20 * RARITY_MULT[it.rarityKey] * (1 + 0.15*it.enhanceLevel) * 21); // [밸런스 조정] 장비 판매가 2000% 상향
@@ -7743,16 +7870,17 @@ function fuseGroupItems(category, groupKey){
   renderAll();
 }
 // 보유한 재료로 가능한 만큼 반복해서 한 번에 합성 (골드가 부족해지면 자동으로 중단)
+// [성능 개선] 예전에는 반복마다(최대 50회) state.inventory 전체를 다시 filter해서 대상 목록을 새로 뽑았다
+// (인벤토리가 커질수록 O(반복횟수 x 인벤토리 크기)). 대상이 되는 후보 목록은 이 함수 시작 시 한 번만 뽑아
+// 로컬 배열로 유지하고, 매 반복마다 성공/실패로 소모된 아이템만 그 배열에서 제거하는 방식으로 바꾼다.
 function fuseGroupItemsBulk(category, groupKey){
   let runs = 0, successes = 0;
+  const matchesId = (i)=> category==='equip'
+    ? (!i.kind && i.type!=='medal' && i.rarityKey!=='mythic' && fusionKeyForEquip(i)===groupKey)
+    : (i.kind===(category==='rune'?'rune':'effectstone') && i.rarityKey===groupKey);
+  let pool = state.inventory.filter(matchesId);
   while(true){
-    let matches;
-    if(category==='equip'){
-      matches = state.inventory.filter(i=> !i.kind && i.type!=='medal' && i.rarityKey!=='mythic' && fusionKeyForEquip(i)===groupKey);
-    } else {
-      const kindKey = category==='rune' ? 'rune' : 'effectstone';
-      matches = state.inventory.filter(i=> i.kind===kindKey && i.rarityKey===groupKey);
-    }
+    const matches = pool;
     if(matches.length<2) break;
     const a = matches[0], b = matches[1];
     const rarityKey = a.rarityKey;
@@ -7765,12 +7893,14 @@ function fuseGroupItemsBulk(category, groupKey){
     const reqLevel = Math.max(a.reqLevel||1, b.reqLevel||1);
     const type = a.type, job = a.job;
     state.inventory = state.inventory.filter(i=> i.id!==a.id && i.id!==b.id);
+    pool = pool.filter(i=> i.id!==a.id && i.id!==b.id); // 소모된 재료를 로컬 후보 목록에서도 제거 (재조회 없이 유지)
     if(success){
       let newItem;
       if(category==='equip') newItem = generateItem(type, 0, job, reqLevel, nextRarityKey);
       else if(category==='rune') newItem = generateRuneAtRarity(nextRarityKey);
       else newItem = generateEffectStoneAtRarity(nextRarityKey);
       state.inventory.push(newItem);
+      // 새로 생성된 아이템은 등급이 달라져(nextRarityKey) 같은 groupKey 후보군에 해당하지 않으므로 pool에 추가할 필요는 없다.
       successes++;
     }
     runs++;
@@ -12739,6 +12869,10 @@ function renderMiningGearSub(){
 }
 // [신규] 등급별 필터: 정령/펫 장비 탭(spiritGearFilter/petGearFilter)과 동일한 inv-filter 패턴을 재사용한다.
 let miningGearFilter = 'all'; // 광산(탐험) 장비 가방 탭 등급 필터: all/common/rare/epic/legendary/mythic
+// [성능 버그 수정] 수족관/사육장과 동일한 패턴: 미장착 탐험 장비는 탐험 상자에서 계속 나와 총량에
+// 상한이 없는데, 기존에는 매번 전체를 innerHTML로 다시 그렸다. 페이지네이션을 적용한다.
+const MINING_GEAR_PAGE_SIZE = 40;
+let miningGearRenderLimit = MINING_GEAR_PAGE_SIZE;
 // 광산 장비 가방 탭: 아직 장착하지 않은 보유 장비 목록 (여기서 바로 장착 가능)
 function renderMiningBagSub(){
   const box = document.getElementById('miningSubBag');
@@ -12747,14 +12881,16 @@ function renderMiningBagSub(){
   // 편의 개선: 등급이 높은 장비가 위로 오도록 정렬 (기존에는 획득 순서라 좋은 장비를 찾기 어려웠다)
   const unequippedFullList = m.gear.filter(g=> !m.equippedGear.includes(g.id))
     .sort((a,b)=> (RARITY_MULT[b.rarityKey]||0) - (RARITY_MULT[a.rarityKey]||0));
-  const unequippedItems = unequippedFullList.filter(g=> miningGearFilter==='all' || g.rarityKey===miningGearFilter);
+  const unequippedFiltered = unequippedFullList.filter(g=> miningGearFilter==='all' || g.rarityKey===miningGearFilter);
+  const unequippedItems = unequippedFiltered.slice(0, miningGearRenderLimit);
+  const miningGearRemaining = unequippedFiltered.length - unequippedItems.length;
   const miningFilterTabs = [['all','전체'],['common','일반'],['rare','희귀'],['epic','영웅'],['legendary','전설'],['mythic','신화']]
     .map(([k,label])=> `<button class="${miningGearFilter===k?'active':''}" data-mining-gear-filter="${k}">${label}</button>`).join('');
   const filterBar = unequippedFullList.length ? `<div class="inv-filter" style="margin-bottom:6px;">${miningFilterTabs}</div>` : '';
   const rows = unequippedItems.map(g=> miningGearCardHtml(g, false)).join('');
   box.innerHTML = `
     <div class="section-label" style="justify-content:space-between;">
-      <span>미장착 탐험 장비 (${unequippedItems.length}/${unequippedFullList.length}개)</span>
+      <span>미장착 탐험 장비 (${unequippedFiltered.length}/${unequippedFullList.length}개)</span>
     </div>
     ${filterBar}
     ${unequippedFullList.length ? `<div style="display:flex;gap:6px;margin-bottom:8px;">
@@ -12763,8 +12899,11 @@ function renderMiningBagSub(){
       <button class="btn btn-secondary" style="flex:1;" data-bulk-gear="epic">영웅 이하 판매</button>
     </div>` : ''}
     <div class="shop-grid">${rows || (unequippedFullList.length ? '<div style="font-size:12px;color:var(--text-dim);">선택한 등급의 탐험 장비가 없습니다.</div>' : '<div style="font-size:12px;color:var(--text-dim);">가방이 비어 있습니다. 탐험 상자에서 장비를 획득해보세요.</div>')}</div>
+    ${miningGearRemaining>0 ? `<button class="btn btn-secondary" id="miningGearLoadMoreBtn" style="width:100%;margin-top:6px;padding:6px 10px;font-size:10.5px;">더 보기 (${miningGearRemaining.toLocaleString()}개 남음)</button>` : ''}
   `;
-  box.querySelectorAll('[data-mining-gear-filter]').forEach(btn=> btn.addEventListener('click', ()=>{ miningGearFilter = btn.dataset.miningGearFilter; renderMiningBagSub(); }));
+  box.querySelectorAll('[data-mining-gear-filter]').forEach(btn=> btn.addEventListener('click', ()=>{ miningGearFilter = btn.dataset.miningGearFilter; miningGearRenderLimit = MINING_GEAR_PAGE_SIZE; renderMiningBagSub(); }));
+  const miningGearLoadMoreBtn = document.getElementById('miningGearLoadMoreBtn');
+  if(miningGearLoadMoreBtn) miningGearLoadMoreBtn.addEventListener('click', ()=>{ miningGearRenderLimit += MINING_GEAR_PAGE_SIZE; renderMiningBagSub(); });
   bindMiningGearToggleButtons(box);
 }
 // [성능 수정] 기존에는 전역 1초 인터벌이 이 함수를 매초 통째로 호출해서, 탐험 탭이 열려 있는 동안
@@ -12889,6 +13028,8 @@ function tickMiningExpeditionTimers(){
   });
   if(needsFullRender) renderMiningExpeditionSub();
 }
+const MINING_JEWEL_PAGE_SIZE = 40;
+let miningJewelRenderLimit = MINING_JEWEL_PAGE_SIZE;
 function renderMiningStorageSub(){
   const box = document.getElementById('miningSubStorage');
   if(!box) return;
@@ -12905,7 +13046,9 @@ function renderMiningStorageSub(){
     if(ra !== 0) return ra;
     return String(a.setKey).localeCompare(String(b.setKey));
   });
-  const jewelRows = sortedJewels.map(j=>{
+  const jewelsPage = sortedJewels.slice(0, miningJewelRenderLimit);
+  const jewelsRemaining = sortedJewels.length - jewelsPage.length;
+  const jewelRows = jewelsPage.map(j=>{
     const r = RARITY_BY_KEY[j.rarityKey];
     const eq = m.equippedJewels.includes(j.id);
     const set = JEWEL_SETS.find(x=>x.key===j.setKey);
@@ -12929,6 +13072,7 @@ function renderMiningStorageSub(){
       <span>보석 (장착 ${m.equippedJewels.length}/3 · 보유 ${m.jewels.length}개)</span>
     </div>
     <div class="shop-grid">${jewelRows || '<div style="font-size:12px;color:var(--text-dim);">보유한 보석이 없습니다.</div>'}</div>
+    ${jewelsRemaining>0 ? `<button class="btn btn-secondary" id="miningJewelLoadMoreBtn" style="width:100%;margin-top:6px;padding:6px 10px;font-size:10.5px;">더 보기 (${jewelsRemaining.toLocaleString()}개 남음)</button>` : ''}
     <div class="section-label" style="margin-top:14px;">탐험 스탯 조각 (보유 ${shardCount}개)</div>
     <div style="font-size:11px;color:var(--text-dim);margin-bottom:6px;">
       사용 시 시간단축 / 드롭률 / 추가획득 중 하나가 무작위로 영구 상승합니다.<br>
@@ -12939,6 +13083,8 @@ function renderMiningStorageSub(){
       <button class="btn btn-primary" style="flex:1;" id="miningUseShardAllBtn" ${shardCount<=0?'disabled':''}>전부 사용 (${shardCount})</button>
     </div>
   `;
+  const miningJewelLoadMoreBtn = document.getElementById('miningJewelLoadMoreBtn');
+  if(miningJewelLoadMoreBtn) miningJewelLoadMoreBtn.addEventListener('click', ()=>{ miningJewelRenderLimit += MINING_JEWEL_PAGE_SIZE; renderMiningStorageSub(); });
   box.querySelectorAll('[data-toggle-jewel]').forEach(btn=>{
     btn.addEventListener('click', ()=>{
       const id = btn.dataset.toggleJewel;
@@ -14598,6 +14744,17 @@ on('farmSubFarm', 'click', (e)=>{
     if(res && res.ok) showToast(`강화 성공! (Lv.${res.plot.enhanceLevel})`);
     else showToast((res && res.reason) ? res.reason : '강화에 실패했습니다', true);
     renderFarmSub();
+    return;
+  }
+  if(btn.id === 'farmSellSeedsBtn'){
+    const gemPreview = farmSeedSellGemTotal();
+    if(gemPreview<=0){ showToast('판매할 씨앗이 없습니다', true); return; }
+    showConfirmModal(`보유한 모든 씨앗을 판매하여 보석 +${gemPreview.toLocaleString()}을(를) 받으시겠습니까? (나무는 판매 대상이 아닙니다)`, ()=>{
+      const res = sellAllFarmSeedsForGems();
+      if(res.ok) showToast(`씨앗 전체 판매 완료! 보석 +${res.gemGain.toLocaleString()}`);
+      else showToast('판매할 씨앗이 없습니다', true);
+      renderFarmSub();
+    });
     return;
   }
   if(btn.id === 'farmBulkCleanupBtn'){

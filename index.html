@@ -3212,6 +3212,12 @@ async function cloudListSlots(){
 // 로컬 자동저장 시점에 함께 호출되어, 로그인 상태이고 마지막 클라우드 저장으로부터
 // CLOUD_SAVE_THROTTLE_MS 이상 지났을 때만 클라우드에도 백업한다.
 // force=true면 쓰로틀을 무시하고 즉시 저장한다(수동 "저장" 버튼 클릭 시 사용).
+// [버그 수정] 창고(모든 캐릭터가 공유하는 골드/보석/아이템 저장소)는 캐릭터 저장(state)과 별도의
+// 저장소라서 클라우드 자동 저장 대상에도 빠져 있었다. 캐릭터 슬롯과 동일한 cloudSave/cloudLoad를
+// 그대로 재사용하되, 슬롯 id 대신 고정된 가상 키('__warehouse__')를 써서 창고 전용 문서로 저장한다.
+const CLOUD_WAREHOUSE_KEY = '__warehouse__';
+async function cloudSaveWarehouse(){ return cloudSave(CLOUD_WAREHOUSE_KEY, warehouse); }
+async function cloudLoadWarehouse(){ return cloudLoad(CLOUD_WAREHOUSE_KEY); }
 async function maybeCloudAutoSave(force){
   if(!firebaseAuth || !cloudUser || !currentSlotId) return;
   const now = Date.now();
@@ -3220,6 +3226,7 @@ async function maybeCloudAutoSave(force){
   cloudSaveInProgress = true;
   try{
     const ok = await cloudSave(currentSlotId, state);
+    await cloudSaveWarehouse();
     if(ok) lastCloudSaveAt = Date.now();
   } finally {
     cloudSaveInProgress = false;
@@ -3234,9 +3241,20 @@ function promptCloudRestore(cloudPayload){
     async ()=>{
       loadStateInto(cloudPayload.data);
       if(hasStorage && currentSlotId) await saveSlot(currentSlotId, state);
+      // [버그 수정] 새 기기에서 로그인해 캐릭터를 복원할 때, 창고(공유 저장소)도 클라우드에서 함께
+      // 불러오지 않으면 창고에 넣어둔 골드/아이템이 새 기기로 전혀 넘어오지 않는 문제가 있었다.
+      const whPayload = await cloudLoadWarehouse();
+      if(whPayload && whPayload.data){
+        warehouse = Object.assign(freshWarehouse(), whPayload.data);
+        if(!warehouse.farmMaterials) warehouse.farmMaterials = freshWarehouse().farmMaterials;
+        if(!Array.isArray(warehouse.items)) warehouse.items = [];
+        if(!Array.isArray(warehouse.jewels)) warehouse.jewels = [];
+        warehouseLoadFailed = false;
+        await saveWarehouse();
+      }
       switchTab('char');
       renderAll();
-      showToast('클라우드 데이터를 불러왔습니다');
+      showToast(whPayload && whPayload.data ? '클라우드 데이터를 불러왔습니다 (창고 포함)' : '클라우드 데이터를 불러왔습니다');
     }
   );
 }
@@ -13676,7 +13694,9 @@ async function showSlotSelect(canClose){
     const origText = exportAllBtn.textContent;
     exportAllBtn.textContent = '압축 중...';
     try{
-      const bundle = { __allSlots: true, savedAt: Date.now(), slots: {} };
+      // [버그 수정] 전체 캐릭터 백업에도 창고(모든 캐릭터 공유 저장소)가 빠져 있어서, 다른 기기로
+      // 옮기면 캐릭터들은 다 넘어가는데 창고에 넣어둔 골드/아이템은 안 넘어가는 문제가 있었다.
+      const bundle = { __allSlots: true, savedAt: Date.now(), slots: {}, warehouse };
       slotIds.forEach((id,i)=>{ bundle.slots[id] = dataList[i] || null; });
       const json = JSON.stringify(bundle);
       const compressed = await compressBackupText(json);
@@ -13711,8 +13731,19 @@ async function showSlotSelect(canClose){
               const slotData = parsed.slots[id];
               if(slotData) await saveSlot(id, normalizeState(slotData));
             }
+            // [버그 수정] 백업에 담겨있던 창고 스냅샷도 함께 복원한다.
+            let warehouseRestored = false;
+            if(parsed.warehouse){
+              warehouse = Object.assign(freshWarehouse(), parsed.warehouse);
+              if(!warehouse.farmMaterials) warehouse.farmMaterials = freshWarehouse().farmMaterials;
+              if(!Array.isArray(warehouse.items)) warehouse.items = [];
+              if(!Array.isArray(warehouse.jewels)) warehouse.jewels = [];
+              warehouseLoadFailed = false;
+              await saveWarehouse();
+              warehouseRestored = true;
+            }
             invalidateOtherSlotCardCache();
-            showToast('전체 캐릭터를 불러왔습니다');
+            showToast(warehouseRestored ? '전체 캐릭터와 창고를 불러왔습니다' : '전체 캐릭터를 불러왔습니다');
             overlay.remove();
             showSlotSelect(overlay.dataset.canClose === '1');
           });
@@ -14010,7 +14041,11 @@ function showBackupModal(opts){
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay';
   overlay.id = 'backupModal';
-  const json = JSON.stringify(targetData);
+  // [버그 수정] 창고(모든 캐릭터가 공유하는 골드/보석/아이템 저장소)는 캐릭터 저장(state)과 완전히
+  // 별도의 저장소(warehouse_shared)라서, 캐릭터 백업 파일에는 전혀 포함되지 않고 있었다. 그래서 백업
+  // 파일로 다른 기기에 옮기면 캐릭터는 그대로 넘어가는데 창고에 넣어둔 돈/아이템은 안 넘어갔다.
+  // 백업 데이터 안에 창고 스냅샷을 함께 담아서, 불러올 때 창고도 같이 복원되도록 한다.
+  const json = JSON.stringify(Object.assign({}, targetData, { __warehouseSnapshot: warehouse }));
   const label = (opts && opts.label) || targetData.name || '캐릭터';
   overlay.innerHTML = `
     <div class="modal-box">
@@ -14128,17 +14163,29 @@ function showBackupModal(opts){
     try{
       const decompressed = await decompressBackupText(text);
       const parsed = JSON.parse(decompressed);
+      // [버그 수정] 백업 안에 창고 스냅샷(__warehouseSnapshot)이 담겨 있으면 함께 복원한다.
+      let warehouseRestored = false;
+      if(parsed && parsed.__warehouseSnapshot){
+        warehouse = Object.assign(freshWarehouse(), parsed.__warehouseSnapshot);
+        if(!warehouse.farmMaterials) warehouse.farmMaterials = freshWarehouse().farmMaterials;
+        if(!Array.isArray(warehouse.items)) warehouse.items = [];
+        if(!Array.isArray(warehouse.jewels)) warehouse.jewels = [];
+        warehouseLoadFailed = false;
+        await saveWarehouse();
+        delete parsed.__warehouseSnapshot;
+        warehouseRestored = true;
+      }
       if(isGlobal){
         loadStateInto(parsed);
         overlay.remove();
         switchTab('char');
         renderAll();
         if(hasStorage && currentSlotId) await saveSlot(currentSlotId, state);
-        showToast('불러오기 완료!');
+        showToast(warehouseRestored ? '불러오기 완료! (창고 데이터도 함께 복원됨)' : '불러오기 완료!');
       } else {
         if(hasStorage && targetSlotId) await saveSlot(targetSlotId, normalizeState(parsed));
         overlay.remove();
-        showToast('불러오기 완료! 캐릭터 선택 화면에서 확인하세요');
+        showToast(warehouseRestored ? '불러오기 완료! (창고 데이터도 함께 복원됨) 캐릭터 선택 화면에서 확인하세요' : '불러오기 완료! 캐릭터 선택 화면에서 확인하세요');
         const modal = document.getElementById('slotModal');
         if(modal){ modal.remove(); showSlotSelect(!!(currentSlotId && state.job)); }
       }
@@ -14151,9 +14198,10 @@ function showBackupModal(opts){
     if(!targetSlotId){ showToast('저장할 캐릭터 슬롯이 없습니다', true); return; }
     cloudSaveBtn.disabled = true;
     const ok = await cloudSave(targetSlotId, targetData);
+    const warehouseOk = await cloudSaveWarehouse(); // [버그 수정] 창고도 함께 클라우드에 저장
     cloudSaveBtn.disabled = false;
     if(ok) lastCloudSaveAt = Date.now();
-    showToast(ok ? '클라우드에 저장되었습니다' : '클라우드 저장에 실패했습니다', !ok);
+    showToast(ok ? (warehouseOk ? '클라우드에 저장되었습니다 (창고 포함)' : '클라우드에 저장되었습니다 (창고 저장은 실패)') : '클라우드 저장에 실패했습니다', !ok);
   });
   const cloudLoadBtn = document.getElementById('cloudLoadBtn');
   if(cloudLoadBtn) cloudLoadBtn.addEventListener('click', async ()=>{
@@ -14163,17 +14211,29 @@ function showBackupModal(opts){
     cloudLoadBtn.disabled = false;
     if(!payload || !payload.data){ showToast('클라우드에 저장된 데이터가 없습니다', true); return; }
     showConfirmModal('클라우드 데이터를 불러올까요? 현재 데이터를 덮어씁니다.', async ()=>{
+      // [버그 수정] 캐릭터와 함께 창고도 클라우드에서 불러와 복원한다.
+      let warehouseRestored = false;
+      const whPayload = await cloudLoadWarehouse();
+      if(whPayload && whPayload.data){
+        warehouse = Object.assign(freshWarehouse(), whPayload.data);
+        if(!warehouse.farmMaterials) warehouse.farmMaterials = freshWarehouse().farmMaterials;
+        if(!Array.isArray(warehouse.items)) warehouse.items = [];
+        if(!Array.isArray(warehouse.jewels)) warehouse.jewels = [];
+        warehouseLoadFailed = false;
+        await saveWarehouse();
+        warehouseRestored = true;
+      }
       if(isGlobal){
         loadStateInto(payload.data);
         overlay.remove();
         switchTab('char');
         renderAll();
         if(hasStorage && currentSlotId) await saveSlot(currentSlotId, state);
-        showToast('클라우드에서 불러왔습니다');
+        showToast(warehouseRestored ? '클라우드에서 불러왔습니다 (창고 포함)' : '클라우드에서 불러왔습니다');
       } else {
         if(hasStorage && targetSlotId) await saveSlot(targetSlotId, normalizeState(payload.data));
         overlay.remove();
-        showToast('클라우드에서 불러왔습니다. 캐릭터 선택 화면에서 확인하세요');
+        showToast(warehouseRestored ? '클라우드에서 불러왔습니다 (창고 포함). 캐릭터 선택 화면에서 확인하세요' : '클라우드에서 불러왔습니다. 캐릭터 선택 화면에서 확인하세요');
         const modal = document.getElementById('slotModal');
         if(modal){ modal.remove(); showSlotSelect(!!(currentSlotId && state.job)); }
       }

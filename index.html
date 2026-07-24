@@ -3215,7 +3215,10 @@ async function cloudListSlots(){
 // [버그 수정] 창고(모든 캐릭터가 공유하는 골드/보석/아이템 저장소)는 캐릭터 저장(state)과 별도의
 // 저장소라서 클라우드 자동 저장 대상에도 빠져 있었다. 캐릭터 슬롯과 동일한 cloudSave/cloudLoad를
 // 그대로 재사용하되, 슬롯 id 대신 고정된 가상 키('__warehouse__')를 써서 창고 전용 문서로 저장한다.
-const CLOUD_WAREHOUSE_KEY = '__warehouse__';
+// [버그 수정] Firestore는 `__문자열__` 형태(앞뒤 이중 밑줄)의 문서 ID를 내부 예약어로 취급해 쓰기 자체를
+// 거부한다. '__warehouse__'가 정확히 이 예약 패턴과 일치해서 창고를 클라우드에 저장할 때마다 실패하고
+// 있었다. 예약 패턴에 걸리지 않는 이름으로 변경한다.
+const CLOUD_WAREHOUSE_KEY = 'shared_warehouse';
 async function cloudSaveWarehouse(){ return cloudSave(CLOUD_WAREHOUSE_KEY, warehouse); }
 async function cloudLoadWarehouse(){ return cloudLoad(CLOUD_WAREHOUSE_KEY); }
 async function maybeCloudAutoSave(force){

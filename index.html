@@ -1058,13 +1058,13 @@ const JOB_STAT_ROLE = {
                                        // 상한의 영향을 받지 않는 agi(공격속도)/str(공격력 부스탯)을 주/부스탯으로 유지한다.
 };
 // 주스탯/부스탯이 전투 스탯(공격력/방어력/체력/공격속도/치명타 등, 결국 전투력 CP)에 반영될 때 곱해지는 배율.
-// [밸런스 조정] "힘만 찍어도 세진다"는 문제를 근본적으로 고치기 위해, 주/부스탯 배율을 한 번 더 올리고
-// (1.8→2.2, 1.3→1.6), 주스탯도 부스탯도 아닌 스탯은 기존처럼 1배를 그대로 주는 게 아니라 0.5배로
-// 낮춘다. 이러면 직업에 안 맞는 스탯(예: 궁수/도적의 힘)을 찍는 것보다 실제 주/부스탯을 찍는 쪽이
-// 항상 확실하게 더 강해지도록 격차가 벌어진다.
+// [밸런스 조정] 주/부스탯도 아닌 스탯에 0.5배 페널티를 줬더니, 모든 캐릭터가 레벨업마다 5개 스탯이
+// 골고루 자동 성장하는 구조상(직업에 안 맞는 스탯을 "일부러" 찍은 사람뿐 아니라 사실상 전원이 자기
+// 직업과 안 맞는 스탯 비중을 상당히 갖고 있음) 전체적으로 캐릭터가 크게 약해지는 부작용이 있었다.
+// 그래서 페널티는 없애고(다시 1배), 주스탯을 찍는 이득만 확실히 크도록 주/부스탯 배율만 유지한다.
 const MAIN_STAT_CP_MULT = 2.2;
 const SUB_STAT_CP_MULT = 1.6;
-const OFF_STAT_CP_MULT = 0.5;
+const OFF_STAT_CP_MULT = 1;
 function statRoleMult(jobKey, statKey){
   const role = JOB_STAT_ROLE[jobKey];
   if(!role) return OFF_STAT_CP_MULT;
@@ -2966,12 +2966,27 @@ async function claimWarehouseInterest(){
   showToast(`창고 이자로 골드 +${g.toLocaleString()} · 보석 +${m.toLocaleString()}을(를) 받았습니다`);
 }
 let warehouse = freshWarehouse();
+// [버그 수정] 예전에는 저장된 창고 데이터를 불러오다가 실패(파싱 에러, 읽기 실패 등)해도 콘솔에만 조용히
+// 로그를 남기고, 화면에는 아무 경고 없이 "빈 창고"(freshWarehouse())로 계속 진행됐다. 그 상태에서 사용자가
+// 뭔가 하나라도 예치/인출하면, saveWarehouse()가 이 "리셋된 빈 창고"를 그대로 저장해버려서, 불러오기만
+// 실패했을 뿐 실제로는 멀쩡히 남아있었을 원래 데이터(골드 등)를 영구적으로 덮어써 지워버릴 수 있었다.
+// 이제 불러오기가 실패하면 warehouseLoadFailed 플래그를 세워 saveWarehouse()가 아예 저장을 거부하도록
+// 막고, 사용자에게도 명확히 경고해서 새로고침 후 다시 시도하도록 안내한다(데이터를 조용히 지우는 대신
+// 안전하게 막는 쪽을 택함).
+let warehouseLoadFailed = false;
 async function loadWarehouse(){
   if(!hasStorage) return;
   try{
     const res = await storageGet('warehouse_shared');
     if(res && res.value){
-      const parsed = JSON.parse(res.value);
+      let parsed;
+      try{ parsed = JSON.parse(res.value); }
+      catch(parseErr){
+        console.error('[warehouse] 저장된 데이터 파싱 실패 - 데이터 보존을 위해 저장을 차단합니다', parseErr, res.value);
+        warehouseLoadFailed = true;
+        showToast('창고 데이터를 불러오지 못했습니다. 데이터 손실을 막기 위해 창고 저장을 막았습니다 - 페이지를 새로고침한 뒤 다시 시도해주세요.', true);
+        return;
+      }
       warehouse = Object.assign(freshWarehouse(), parsed);
       if(!warehouse.farmMaterials) warehouse.farmMaterials = freshWarehouse().farmMaterials;
       if(!Array.isArray(warehouse.items)) warehouse.items = [];
@@ -2979,10 +2994,19 @@ async function loadWarehouse(){
       if(!warehouse.lastInterestAt) warehouse.lastInterestAt = Date.now();
     }
     accrueWarehouseInterest();
-  }catch(e){ console.error('[warehouse] 불러오기 실패', e); }
+  }catch(e){
+    console.error('[warehouse] 불러오기 실패', e);
+    warehouseLoadFailed = true;
+    showToast('창고 데이터를 불러오지 못했습니다. 데이터 손실을 막기 위해 창고 저장을 막았습니다 - 페이지를 새로고침한 뒤 다시 시도해주세요.', true);
+  }
 }
 async function saveWarehouse(){
   if(!hasStorage) return;
+  if(warehouseLoadFailed){
+    console.error('[warehouse] 저장 차단됨 - 이전에 불러오기 실패로 데이터 보호를 위해 저장이 막혀 있습니다');
+    showToast('창고 데이터를 정상적으로 불러오지 못해 저장이 막혀 있습니다. 페이지를 새로고침해주세요.', true);
+    return;
+  }
   try{ await storageSet('warehouse_shared', JSON.stringify(warehouse)); }
   catch(e){ console.error('[warehouse] 저장 실패', e); showToast('창고 저장에 실패했습니다', true); }
 }
@@ -4217,15 +4241,26 @@ function computeTotalsFor(s){
   const agiRoleMult = statRoleMult(s.job, 'agi');
   const intRoleMult = statRoleMult(s.job, 'int');
   const lukRoleMult = statRoleMult(s.job, 'luk');
-  const atkStatMult = ((s.job === 'mage') ? 1.1 : 2) * strRoleMult;
-  // [버그 수정] 궁수/도적의 주스탯인 민첩(agi)이 그동안 공격속도에만 반영되고 공격력에는 전혀 기여하지
-  // 않아서, 힘(궁수/도적에겐 주/부스탯도 아닌 스탯)을 올리는 게 오히려 전투력·실제 데미지를 더 많이
-  // 올리는 역설적인 상황이 있었다. 마법사의 지능(int)이 atkSecondaryStat으로 공격력에 직접 기여하는 것과
-  // 동일하게, 궁수/도적도 주스탯(민첩)이 공격력에 직접 기여하도록 맞춘다 (공격속도 기여는 그대로 유지).
-  const atkSecondaryStat = (s.job === 'mage') ? totals.int*1.4*intRoleMult
-    : (s.job === 'archer' || s.job === 'rogue') ? totals.agi*1.4*agiRoleMult
-    : 0;
-  let atk = (5 + totals.str*atkStatMult + atkSecondaryStat + weaponAtk) * (1 + affixAcc.atkPct/100);
+  // [버그 수정] 예전엔 힘(str)이 직업에 상관없이 "누구나 갖는 기본 공격력 스탯"으로 항상 공격력에
+  // 반영돼서, 궁수/도적/마법사도 힘만 찍으면 무조건 세지는 근본 원인이었다(주스탯 배율을 아무리 올려도
+  // 힘의 "기본 기여분" 자체는 절대 사라지지 않았음). 이제 힘/민첩/지능은 그 직업의 진짜 주스탯이나
+  // 부스탯일 때만 공격력에 기여하고, 그렇지 않으면 공격력에는 아예 기여하지 않는다(방어력/체력/치명타
+  // 등 자기 원래 역할에는 여전히 기여함 - 예: 힘이 전사의 부스탯이 아니어도 마법사의 힘은 여전히 0).
+  // 주/부스탯이 아니어도 완전히 쓸모없어지진 않도록, 원래 담당 영역(체력/방어력/치명타 등)은 그대로 둬서
+  // 전체적인 캐릭터 강함 자체가 확 깎이지는 않게 한다.
+  const ATK_STAT_ROLE_BASE_COEF = 2; // 주/부스탯일 때 공격력에 기여하는 기본 계수 (힘/민첩/지능 공통)
+  const ATK_OFF_STAT_COEF = 0.3; // 주/부스탯이 아니어도 완전히 0은 아니고 소폭(15%)은 기여하도록
+  // amount를 생략하면 totals[statKey]를 사용한다 - 이 함수 하나로 기본 스탯/스킬 패시브/정령/낚시 보너스 등
+  // "힘·민첩·지능이 공격력에 기여하는" 모든 지점에서 동일한 규칙(주/부스탯이면 크게, 아니면 소폭)을 재사용한다.
+  function atkContribFromStat(statKey, mult, amount){
+    const amt = amount!=null ? amount : (totals[statKey]||0);
+    if(mult === MAIN_STAT_CP_MULT || mult === SUB_STAT_CP_MULT) return amt * ATK_STAT_ROLE_BASE_COEF * mult;
+    return amt * ATK_STAT_ROLE_BASE_COEF * ATK_OFF_STAT_COEF; // 주스탯도 부스탯도 아니면 소폭만 기여
+  }
+  const atkFromStr = atkContribFromStat('str', strRoleMult);
+  const atkFromAgi = atkContribFromStat('agi', agiRoleMult);
+  const atkFromInt = atkContribFromStat('int', intRoleMult);
+  let atk = (5 + atkFromStr + atkFromAgi + atkFromInt + weaponAtk) * (1 + affixAcc.atkPct/100);
   let def = (3 + totals.vit*1.5*vitRoleMult + equipDefBonus) * (1 + affixAcc.defPct/100);
   let hp = (80 + totals.vit*8*vitRoleMult) * (1 + affixAcc.hpPct/100);
   let spd = weaponSpeed + totals.agi*ATK_SPEED_AGI_MULT*agiRoleMult; // [밸런스] 민첩→공격속도 환산 계수 축소 (인플레이션 완화) + 주/부스탯 배율
@@ -4249,10 +4284,10 @@ function computeTotalsFor(s){
     if(skDef.statKey==='critChance') crit += amt/100;
     else if(skDef.statKey==='critDmg') critDmgMult += amt/100;
     else if(skDef.statKey==='atkPct') atk *= (1+amt/100);
-    else if(skDef.statKey==='str'){ atk += amt*atkStatMult; }
+    else if(skDef.statKey==='str'){ atk += atkContribFromStat('str', strRoleMult, amt); }
     else if(skDef.statKey==='vit'){ def += amt*1.5*vitRoleMult; hp += amt*8*vitRoleMult; }
-    else if(skDef.statKey==='int'){ maxMana += amt*4; skillMult += amt*0.01*intRoleMult; if(s.job==='mage') atk += amt*1.4*intRoleMult; }
-    else if(skDef.statKey==='agi'){ spd += amt*ATK_SPEED_AGI_MULT*agiRoleMult; }
+    else if(skDef.statKey==='int'){ maxMana += amt*4; skillMult += amt*0.01*intRoleMult; atk += atkContribFromStat('int', intRoleMult, amt); }
+    else if(skDef.statKey==='agi'){ spd += amt*ATK_SPEED_AGI_MULT*agiRoleMult; atk += atkContribFromStat('agi', agiRoleMult, amt); }
     else if(skDef.statKey==='luk'){ crit += amt*0.006*lukRoleMult; critDmgMult += amt*0.002*lukRoleMult; }
   });
 
@@ -4329,11 +4364,9 @@ function computeTotalsFor(s){
   goldFindPct += spiritBonus.goldFindPct;
   expFindPct += spiritBonus.expFindPct;
   affixAcc.cooldownReduction += spiritBonus.cooldownReductionPct||0;
-  // 정령이 부여하는 힘/민첩/지능/행운(주스탯)은 캐릭터 본인의 주스탯과 동일한 공식(주/부스탯 배율 포함)으로 전투 스탯에 반영된다
-  // [버그 수정] 위쪽의 atkSecondaryStat과 동일하게, 이 정령 보너스 반영 부분도 마법사(지능)만 처리하고
-  // 궁수/도적(민첩)은 빠져 있었다. 정령의 힘으로 민첩을 올려도 궁수/도적은 공격력에 전혀 기여하지 못하던
-  // 문제라 동일하게 맞춘다.
-  atk += spiritBonus.str*atkStatMult + (s.job==='mage' ? spiritBonus.int*1.4*intRoleMult : (s.job==='archer'||s.job==='rogue') ? spiritBonus.agi*1.4*agiRoleMult : 0);
+  // 정령이 부여하는 힘/민첩/지능(주/부스탯일 때만)은 위쪽 atkContribFromStat과 완전히 동일한 규칙으로
+  // 공격력에 반영한다 - 주/부스탯이 아니면 정령으로 그 스탯을 올려도 공격력에는 기여하지 않는다.
+  atk += atkContribFromStat('str', strRoleMult, spiritBonus.str) + atkContribFromStat('agi', agiRoleMult, spiritBonus.agi) + atkContribFromStat('int', intRoleMult, spiritBonus.int);
   spd += spiritBonus.agi*ATK_SPEED_AGI_MULT*agiRoleMult;
   crit += spiritBonus.luk*0.006*lukRoleMult;
   critDmgMult += spiritBonus.luk*0.002*lukRoleMult;
@@ -4352,7 +4385,7 @@ function computeTotalsFor(s){
   critDmgMult += fishingBonus.critDmgAdd/100;
   goldFindPct += fishingBonus.goldFindPct;
   expFindPct += fishingBonus.expFindPct;
-  atk += fishingBonus.str*atkStatMult + (s.job==='mage' ? fishingBonus.int*1.4*intRoleMult : 0);
+  atk += atkContribFromStat('str', strRoleMult, fishingBonus.str) + atkContribFromStat('agi', agiRoleMult, fishingBonus.agi) + atkContribFromStat('int', intRoleMult, fishingBonus.int);
   spd += fishingBonus.agi*ATK_SPEED_AGI_MULT*agiRoleMult;
   crit += fishingBonus.luk*0.006*lukRoleMult;
   critDmgMult += fishingBonus.luk*0.002*lukRoleMult;

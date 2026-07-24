@@ -2242,6 +2242,9 @@ function buildBranchSkills(){
         effectText:(lv)=> lv===0?'미보유':`${PASSIVE_STAT_LABEL[statKey]||statKey} +${Math.round(per*lv*10)/10}${(statKey==='critChance'||statKey==='critDmg'||statKey==='atkPct')?'%':''}`
       });
     }
+    // [버그 수정] 마법사(비숍/아크메이지)는 4차 전직 스킬이 계열당 5개인데, 다른 직업은 대부분 4개
+    // (신궁은 3개)뿐이라 모든 스킬을 MAX까지 찍는 데 필요한 총 포인트가 마법사만 더 많았다(불공평).
+    // 아래 각 계열에 부족한 만큼 패시브 스킬을 추가해 모든 계열이 5개로 맞춰지도록 한다.
     if(branch==='bishop'){
       addActive('buff1','천상의 축복(버프)', { buffType:'buff', cooldown:7, buffDuration:60,
         desc:'[비숍] 마나를 소모해 공격력을 크게 올립니다.', buffMult:buffM,
@@ -2277,6 +2280,7 @@ function buildBranchSkills(){
         effectText:(lv)=> lv===0?'미보유':`쿨타임 5턴 · 피해 ATK의 ${Math.round((0.7+0.16*(lv-1))*100)}%` });
       passiveStat('passive1','치명의 그림자', 'critChance', 1.2);
       passiveStat('passive2','완벽한 일격', 'critDmg', 2.2);
+      passiveStat('passive3','칠흑의 몸놀림', 'agi', 5);
     } else if(branch==='hermit'){
       addActive('aoe1','연막 난도(광역)', { aoe:true, cooldown:6, mult:aoeM,
         desc:'[허밋] 마나를 소모해 연막 속에서 주변을 베어냅니다.',
@@ -2288,6 +2292,7 @@ function buildBranchSkills(){
         desc:'[허밋] 마나를 소모해 은신 상태에서 치명적인 일격을 가합니다.',
         effectText:(lv)=> lv===0?'미보유':`쿨타임 9턴 · 피해 ATK의 ${Math.round(ult(lv)*100)}%` });
       passiveStat('passive1','그림자 은신술', 'agi', 5);
+      passiveStat('passive2','기민한 은신', 'critChance', 1.2);
     } else if(branch==='bowmaster'){
       addActive('aoe1','폭풍 사격(광역)', { aoe:true, cooldown:6, mult:aoeM,
         desc:'[보우마스터] 마나를 소모해 여러 발의 화살을 흩뿌립니다.',
@@ -2297,12 +2302,15 @@ function buildBranchSkills(){
         effectText:(lv)=> lv===0?'미보유':`쿨타임 7턴 · 지속 60초 · 공격력 +${Math.round(buffM(lv)*100)}%` });
       passiveStat('passive1','전투 숙련', 'atkPct', 1.3);
       passiveStat('passive2','매서운 눈매', 'critChance', 1.2);
+      passiveStat('passive3','바람의 가호', 'agi', 5);
     } else if(branch==='divineArcher'){
       addActive('ultimate','관통의 화살(극딜)', { cooldown:9, mult:(lv)=>2.4+0.58*(lv-1),
         desc:'[신궁] 마나를 소모해 단 한 발로 모든 것을 꿰뚫는 화살을 발사합니다.',
         effectText:(lv)=> lv===0?'미보유':`쿨타임 9턴 · 피해 ATK의 ${Math.round((2.4+0.58*(lv-1))*100)}%` });
       passiveStat('passive1','전투 본능', 'atkPct', 1.5);
       passiveStat('passive2','필중의 감각', 'critDmg', 2.2);
+      passiveStat('passive3','냉정한 집중', 'agi', 5);
+      passiveStat('passive4','불굴의 사수', 'vit', 3);
     } else if(branch==='darkknight'){
       addActive('aoe1','심연의 강타(광역)', { aoe:true, cooldown:6, mult:aoeM,
         desc:'[다크나이트] 마나를 소모해 어둠의 힘으로 주변을 강타합니다.',
@@ -2312,6 +2320,7 @@ function buildBranchSkills(){
         effectText:(lv)=> lv===0?'미보유':`쿨타임 9턴 · 피해 ATK의 ${Math.round(ult(lv)*100)}%` });
       passiveStat('passive1','암흑의 힘', 'atkPct', 1.4);
       passiveStat('passive2','불굴의 기사', 'str', 5);
+      passiveStat('passive3','불멸의 결의', 'vit', 5);
     } else if(branch==='paladin'){
       addActive('aoe1','성스러운 파동(광역)', { aoe:true, cooldown:6, mult:aoeM,
         desc:'[팔라딘] 마나를 소모해 신성한 힘으로 주변에 피해를 입힙니다.',
@@ -2323,6 +2332,7 @@ function buildBranchSkills(){
         desc:'[팔라딘] 마나를 소모해 체력을 크게 회복합니다.',
         effectText:(lv)=> lv===0?'미보유':`쿨타임 5턴 · 회복량 ${Math.round(healM(lv)*100)}%` });
       passiveStat('passive1','수호자의 의지', 'vit', 5);
+      passiveStat('passive2','성전사의 격노', 'atkPct', 1.3);
     }
     JOB_SKILLS[job] = [...(JOB_SKILLS[job]||[]), ...Object.keys(SKILL_DEFS).filter(k=> SKILL_DEFS[k].branch===branch && SKILL_DEFS[k].kind==='active')];
   });
@@ -3038,15 +3048,28 @@ function renderAuthUI(){
 // [Firebase 전환] Firestore에는 유저(uid)당 문서 하나(collection 'saves', doc id = uid)에
 // 슬롯별 필드({ char1: {data, updatedAt}, char2: {...}, ... })로 저장한다. 보안 규칙에서
 // request.auth.uid == 문서 id 인 경우에만 읽기/쓰기를 허용해야 한다(Firestore 콘솔에 안내함).
+// [버그 수정] "클라우드 저장 실패"가 계속 뜨는 문제의 유력한 원인을 찾았다: 예전에는 유저(uid) 1명당
+// Firestore 문서를 딱 1개만 두고, 그 안에 모든 캐릭터 슬롯의 세이브 데이터를 전부 합쳐서(merge) 저장하고
+// 있었다. Firestore는 문서 하나의 크기가 1MB(1,048,576바이트)를 넘으면 쓰기 자체가 실패하는데, 이 게임은
+// 장비/인벤토리/농장/펫 등 데이터가 오래 플레이할수록 계속 불어나고, 여러 캐릭터를 키울수록 그 데이터가
+// 전부 같은 문서 하나에 누적된다. 그래서 캐릭터를 여러 개 오래 키운 계정은 합산 문서 크기가 1MB를
+// 넘어버려서, 그 이후로는 "저장할 때마다 매번" 실패하게 된다(사이즈가 줄어들 일이 없으니 한번 넘으면
+// 영구적으로 계속 실패). 슬롯마다 별도의 문서(saves/{uid}/slots/{slotId})로 나눠서, 한 캐릭터의 세이브가
+// 커져도 그 캐릭터의 문서에만 영향을 주도록 구조를 바꾼다. 기존 방식으로 저장돼 있던 데이터도 계속
+// 불러올 수 있도록 cloudLoad/cloudListSlots에는 예전 구조 폴백을 남겨둔다.
 async function cloudSave(slotId, data){
   if(!firebaseAuth || !firebaseDb) return false;
   const user = firebaseAuth.currentUser;
   if(!user || !slotId) return false;
   beginCloudSync();
   try{
-    await firebaseDb.collection('saves').doc(user.uid).set({
-      [slotId]: { data: JSON.stringify(data), updatedAt: Date.now() }
-    }, { merge: true });
+    const payload = JSON.stringify(data);
+    if(payload.length > 900000){
+      console.error('[cloudSave] 저장 데이터가 Firestore 문서 크기 제한(1MB)에 근접/초과했습니다', { slotId, bytes: payload.length });
+    }
+    await firebaseDb.collection('saves').doc(user.uid).collection('slots').doc(slotId).set({
+      data: payload, updatedAt: Date.now()
+    });
     return true;
   }catch(e){
     console.error('[cloudSave] 예외 발생', { slotId, error: e });
@@ -3063,11 +3086,23 @@ async function cloudLoad(slotId){
   if(!user || !slotId) return null;
   beginCloudSync();
   try{
-    const docSnap = await firebaseDb.collection('saves').doc(user.uid).get();
-    if(!docSnap.exists) return null;
-    const all = docSnap.data() || {};
-    const entry = all[slotId];
-    if(!entry) return null;
+    const docSnap = await firebaseDb.collection('saves').doc(user.uid).collection('slots').doc(slotId).get();
+    if(!docSnap.exists){
+      // 새 구조(슬롯별 문서)에 없으면, 예전 구조(유저당 문서 1개에 슬롯을 합쳐 저장)로 남아있던
+      // 데이터를 폴백으로 한 번 더 확인한다 (마이그레이션 이전에 저장된 계정을 위한 하위 호환).
+      const legacyDoc = await firebaseDb.collection('saves').doc(user.uid).get();
+      if(!legacyDoc.exists) return null;
+      const legacyAll = legacyDoc.data() || {};
+      const legacyEntry = legacyAll[slotId];
+      if(!legacyEntry) return null;
+      let legacyParsed = legacyEntry.data;
+      if(typeof legacyParsed === 'string'){
+        try{ legacyParsed = JSON.parse(legacyParsed); }
+        catch(e3){ console.error('[cloudLoad] 레거시 데이터 파싱 실패', { slotId, error: e3 }); return null; }
+      }
+      return { ok:true, data: legacyParsed, meta: { updatedAt: legacyEntry.updatedAt } };
+    }
+    const entry = docSnap.data() || {};
     let parsedData = entry.data;
     if(typeof parsedData === 'string'){
       try{ parsedData = JSON.parse(parsedData); }
@@ -3088,9 +3123,13 @@ async function cloudListSlots(){
   const user = firebaseAuth.currentUser;
   if(!user) return null;
   try{
-    const docSnap = await firebaseDb.collection('saves').doc(user.uid).get();
-    if(!docSnap.exists) return [];
-    const all = docSnap.data() || {};
+    const snap = await firebaseDb.collection('saves').doc(user.uid).collection('slots').get();
+    const list = snap.docs.map(d=> ({ slotId: d.id, key: d.id }));
+    if(list.length) return list;
+    // 새 구조에 아무 것도 없으면 예전 구조(마이그레이션 이전 계정)도 폴백으로 확인한다.
+    const legacyDoc = await firebaseDb.collection('saves').doc(user.uid).get();
+    if(!legacyDoc.exists) return [];
+    const all = legacyDoc.data() || {};
     return Object.keys(all).map(key=> ({ slotId: key, key }));
   }catch(e){
     console.error('[cloudListSlots] 예외 발생', { error: e });
@@ -4131,7 +4170,13 @@ function computeTotalsFor(s){
   const intRoleMult = statRoleMult(s.job, 'int');
   const lukRoleMult = statRoleMult(s.job, 'luk');
   const atkStatMult = ((s.job === 'mage') ? 1.1 : 2) * strRoleMult;
-  const atkSecondaryStat = (s.job === 'mage') ? totals.int*1.4*intRoleMult : 0;
+  // [버그 수정] 궁수/도적의 주스탯인 민첩(agi)이 그동안 공격속도에만 반영되고 공격력에는 전혀 기여하지
+  // 않아서, 힘(궁수/도적에겐 주/부스탯도 아닌 스탯)을 올리는 게 오히려 전투력·실제 데미지를 더 많이
+  // 올리는 역설적인 상황이 있었다. 마법사의 지능(int)이 atkSecondaryStat으로 공격력에 직접 기여하는 것과
+  // 동일하게, 궁수/도적도 주스탯(민첩)이 공격력에 직접 기여하도록 맞춘다 (공격속도 기여는 그대로 유지).
+  const atkSecondaryStat = (s.job === 'mage') ? totals.int*1.4*intRoleMult
+    : (s.job === 'archer' || s.job === 'rogue') ? totals.agi*1.4*agiRoleMult
+    : 0;
   let atk = (5 + totals.str*atkStatMult + atkSecondaryStat + weaponAtk) * (1 + affixAcc.atkPct/100);
   let def = (3 + totals.vit*1.5*vitRoleMult + equipDefBonus) * (1 + affixAcc.defPct/100);
   let hp = (80 + totals.vit*8*vitRoleMult) * (1 + affixAcc.hpPct/100);
@@ -9643,6 +9688,36 @@ function expGainLateBumpMult(level){
   if(level <= EXP_GAIN_LATE_BUMP_START) return 1;
   return 1 + Math.min(0.25, (level - EXP_GAIN_LATE_BUMP_START) * 0.003);
 }
+// [버그 수정] "300레벨을 다 채워도 모든 스킬을 MAX까지 못 찍는다"는 문제 수정. 직업마다 정확히 자기
+// 필요량만큼만 주면(전사/궁수/도적 825, 마법사 845) 마법사만 20포인트를 더 갖게 되어 직업 간 불공평이
+// 생긴다. 그래서 모든 직업이 "가장 필요량이 많은 직업(마법사, 845) 기준"으로 동일하게 845포인트를 벌 수
+// 있도록 통일한다 - 어떤 직업을 키우든 절대 손해 보지 않게.
+function maxSkillPointsNeededForJob(job){
+  const branches = new Set();
+  Object.values(SKILL_DEFS).forEach(d=>{ if(d.job===job && d.branch) branches.add(d.branch); });
+  const branchList = branches.size ? [...branches] : [null];
+  let maxTotal = 0;
+  branchList.forEach(branch=>{
+    let total = 0;
+    Object.values(SKILL_DEFS).forEach(d=>{
+      if(d.job && d.job !== job) return;
+      if(d.branch && d.branch !== branch) return;
+      total += d.maxLevel;
+    });
+    maxTotal = Math.max(maxTotal, total);
+  });
+  return maxTotal;
+}
+const SKILL_POINTS_LEVELUPS = MAX_LEVEL - 1; // 1레벨→300레벨까지 총 레벨업 횟수 (299)
+// 모든 직업 중 가장 필요량이 많은 직업(마법사) 기준으로 통일 - 모든 직업이 동일하게 이만큼을 번다.
+const SKILL_POINTS_TOTAL_TARGET = Math.max(...Object.keys(JOBS).map(maxSkillPointsNeededForJob), 0);
+const SKILL_POINTS_BASE_PER_LEVEL = Math.floor(SKILL_POINTS_TOTAL_TARGET / SKILL_POINTS_LEVELUPS);
+// 299로 정수 나눗셈이 딱 떨어지지 않는 나머지는 초반 레벨업들에 1포인트씩 더 얹어서,
+// 합계가 정확히 SKILL_POINTS_TOTAL_TARGET이 되도록 한다.
+const SKILL_POINTS_BONUS_LEVELUPS = SKILL_POINTS_TOTAL_TARGET - SKILL_POINTS_BASE_PER_LEVEL*SKILL_POINTS_LEVELUPS;
+function skillPointsForLevelUp(levelUpIndex){
+  return SKILL_POINTS_BASE_PER_LEVEL + (levelUpIndex <= SKILL_POINTS_BONUS_LEVELUPS ? 1 : 0);
+}
 function gainExp(amount, opts){
   // [신규] 농장 특수 보상으로 얻는 "경험치 3배" 버프가 활성 중이면 획득 경험치를 3배로 계산한다.
   // 단, opts.skipExpBoost===true인 호출(예: 농장 수확 경험치)은 이 3배 버프의 영향을 받지 않는다.
@@ -9662,13 +9737,10 @@ function gainExp(amount, opts){
   let levelsGained = 0;
   while(state.level < MAX_LEVEL && state.exp >= expNeeded(state.level)){
     state.exp -= expNeeded(state.level);
+    const levelUpIndex = state.level; // 이번이 몇 번째 레벨업인지(1~299) - 증가 전 레벨을 그대로 인덱스로 사용
     state.level += 1;
     state.gems += 25;
-    // [버그 수정] 한 직업(공통 스킬 + 직업 전용 + 4차/5차 계열 스킬)의 모든 스킬을 MAX까지 찍는 데 필요한
-    // 총 포인트를 계산해보니 825인데, 레벨업당 2포인트씩이면 1~300레벨 동안 최대 598포인트밖에 못 벌어서
-    // 끝까지 성장해도 절대 모든 스킬을 MAX로 찍을 수 없었다(약 227포인트 부족). 3포인트로 올려서
-    // 최대 897포인트를 벌 수 있게 해, 300레벨에 모든 스킬을 MAX까지 찍을 수 있도록 수정.
-    state.skillPoints += 3;
+    state.skillPoints += skillPointsForLevelUp(levelUpIndex);
     levelsGained += 1;
     if(state.level >= MAX_LEVEL){ state.exp = 0; break; }
   }
@@ -11039,6 +11111,18 @@ function runRaidChunk(){
     RAID_CONTEXT_ACTIVE = false;
   }
   raidRun.hp = result.endHp; raidRun.mana = result.endMana;
+  // [심각한 버그 수정] simulateBattle()은 적 체력을 지역변수(enHp)로만 추적하고 반환값에 남은 적 체력을
+  // 전혀 포함하지 않았다. 그래서 레이드 전투가 한 청크 안에서 끝나지 않고(공격속도가 매우 높은 빌드나,
+  // 보스 페이즈 전환으로 방어력이 오르는 시점에 어쩌다 20000회 반복 상한에 먼저 도달하는 경우 등)
+  // 다음 청크로 이어질 때, raidRun.enemy.hp가 전혀 갱신되지 않아 다음 청크가 "이미 깎아놓은 적 체력"이
+  // 아니라 사실상 원래 최대체력 그대로에서 다시 시작해버렸다. 평소엔 한 청크 안에서 즉시 끝나(0.1초 클리어)
+  // 이 문제가 드러나지 않다가, 아주 가끔(특히 보스 페이즈 전환 타이밍에 따라) 한 청크로 안 끝나는 순간
+  // 사실상 절대 이길 수 없는 상태가 되어 90초 제한시간을 넘겨 패배 처리되던 버그. 이번 청크에서 실제로
+  // 깎인 적 체력(로그의 마지막 항목이 기록한 enHp)을 raidRun.enemy.hp에 반드시 반영해 다음 청크로 이어지게 한다.
+  if(result.log && result.log.length){
+    const lastLoggedEnHp = result.log[result.log.length-1].enHp;
+    if(typeof lastLoggedEnHp === 'number') raidRun.enemy.hp = Math.max(0, lastLoggedEnHp);
+  }
   // [버그 수정] 레이드 전투가 여러 청크로 나뉘어 이어질 때, 20초/60초 고정 피해 타이머가 매 청크마다
   // 초기화되어 실제로는 누적 시간이 이미 지났는데도 영영 발동하지 않던 문제 수정. 이번 청크가 끝난
   // 시점의 누적 경과시간/다음 발동 시각을 저장해뒀다가 다음 청크 호출 시 그대로 이어서 사용한다.

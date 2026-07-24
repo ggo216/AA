@@ -3073,6 +3073,15 @@ function renderAuthUI(){
 // 영구적으로 계속 실패). 슬롯마다 별도의 문서(saves/{uid}/slots/{slotId})로 나눠서, 한 캐릭터의 세이브가
 // 커져도 그 캐릭터의 문서에만 영향을 주도록 구조를 바꾼다. 기존 방식으로 저장돼 있던 데이터도 계속
 // 불러올 수 있도록 cloudLoad/cloudListSlots에는 예전 구조 폴백을 남겨둔다.
+// [버그 수정] 슬롯을 문서별로 나눈 것만으로는 부족했다 - 실제로 캐릭터 "한 명"의 세이브 데이터 자체가
+// 이미 Firestore 문서 하나의 최대 크기(1MB)에 근접/초과하는 경우가 실제 콘솔 로그로 확인됐다(장비/인벤토리/
+// 농장/펫 등이 오래 플레이할수록 계속 불어나기 때문에 캐릭터 하나만으로도 충분히 커질 수 있음). 그래서
+// 데이터 자체를 CLOUD_SAVE_CHUNK_SIZE자 단위의 여러 "조각(chunk)" 문서로 쪼개 저장하고, 불러올 때 전부
+// 다시 이어붙이는 방식으로 바꾼다. 이러면 세이브 데이터가 앞으로 더 커지더라도 문서 하나의 크기 제한에
+// 걸리지 않는다. 슬롯 문서(saves/{uid}/slots/{slotId})는 이제 실제 데이터 대신 "몇 조각으로 나뉘어
+// 있는지(chunkCount)"와 갱신 시각만 담는 매니페스트 역할을 하고, 실제 데이터는 그 아래 하위 컬렉션
+// (chunks/{index})에 나뉘어 저장된다.
+const CLOUD_SAVE_CHUNK_SIZE = 700000; // 문자 70만자 ≈ 700KB, 1MB 제한에 안전 마진을 둔 값
 async function cloudSave(slotId, data){
   if(!firebaseAuth || !firebaseDb) return false;
   const user = firebaseAuth.currentUser;
@@ -3080,12 +3089,20 @@ async function cloudSave(slotId, data){
   beginCloudSync();
   try{
     const payload = JSON.stringify(data);
-    if(payload.length > 900000){
-      console.error('[cloudSave] 저장 데이터가 Firestore 문서 크기 제한(1MB)에 근접/초과했습니다', { slotId, bytes: payload.length });
-    }
-    await firebaseDb.collection('saves').doc(user.uid).collection('slots').doc(slotId).set({
-      data: payload, updatedAt: Date.now()
-    });
+    const chunks = [];
+    for(let i=0;i<payload.length;i+=CLOUD_SAVE_CHUNK_SIZE) chunks.push(payload.slice(i, i+CLOUD_SAVE_CHUNK_SIZE));
+    if(chunks.length === 0) chunks.push(''); // 빈 데이터라도 최소 1조각은 있어야 로드 시 구분 가능
+    const slotRef = firebaseDb.collection('saves').doc(user.uid).collection('slots').doc(slotId);
+    const chunksRef = slotRef.collection('chunks');
+    // 이전 저장분이 이번 저장보다 조각 수가 많았다면(데이터가 줄어든 경우), 남는 옛날 조각을 지워야
+    // 다음에 불러올 때 옛날 조각 뒷부분이 섞여 들어가지 않는다.
+    const prevSnap = await slotRef.get();
+    const prevChunkCount = (prevSnap.exists && prevSnap.data().chunkCount) || 0;
+    const batch = firebaseDb.batch();
+    chunks.forEach((chunk, idx)=> batch.set(chunksRef.doc(String(idx)), { data: chunk }));
+    for(let idx=chunks.length; idx<prevChunkCount; idx++) batch.delete(chunksRef.doc(String(idx)));
+    batch.set(slotRef, { chunkCount: chunks.length, updatedAt: Date.now() });
+    await batch.commit();
     return true;
   }catch(e){
     console.error('[cloudSave] 예외 발생', { slotId, error: e });
@@ -3102,29 +3119,40 @@ async function cloudLoad(slotId){
   if(!user || !slotId) return null;
   beginCloudSync();
   try{
-    const docSnap = await firebaseDb.collection('saves').doc(user.uid).collection('slots').doc(slotId).get();
-    if(!docSnap.exists){
-      // 새 구조(슬롯별 문서)에 없으면, 예전 구조(유저당 문서 1개에 슬롯을 합쳐 저장)로 남아있던
-      // 데이터를 폴백으로 한 번 더 확인한다 (마이그레이션 이전에 저장된 계정을 위한 하위 호환).
-      const legacyDoc = await firebaseDb.collection('saves').doc(user.uid).get();
-      if(!legacyDoc.exists) return null;
-      const legacyAll = legacyDoc.data() || {};
-      const legacyEntry = legacyAll[slotId];
-      if(!legacyEntry) return null;
-      let legacyParsed = legacyEntry.data;
-      if(typeof legacyParsed === 'string'){
-        try{ legacyParsed = JSON.parse(legacyParsed); }
-        catch(e3){ console.error('[cloudLoad] 레거시 데이터 파싱 실패', { slotId, error: e3 }); return null; }
-      }
-      return { ok:true, data: legacyParsed, meta: { updatedAt: legacyEntry.updatedAt } };
+    const slotRef = firebaseDb.collection('saves').doc(user.uid).collection('slots').doc(slotId);
+    const docSnap = await slotRef.get();
+    if(docSnap.exists && typeof docSnap.data().chunkCount === 'number'){
+      // 조각(chunk) 구조: chunkCount만큼의 하위 문서를 전부 읽어 순서대로 이어붙인다.
+      const entry = docSnap.data();
+      const chunkDocs = await Promise.all(
+        Array.from({length: entry.chunkCount}, (_, idx)=> slotRef.collection('chunks').doc(String(idx)).get())
+      );
+      const payload = chunkDocs.map(d=> (d.exists && d.data().data) || '').join('');
+      try{
+        return { ok: true, data: JSON.parse(payload), meta: { updatedAt: entry.updatedAt } };
+      }catch(e3){ console.error('[cloudLoad] 조각 데이터 파싱 실패', { slotId, error: e3 }); return null; }
     }
-    const entry = docSnap.data() || {};
-    let parsedData = entry.data;
-    if(typeof parsedData === 'string'){
+    if(docSnap.exists && typeof docSnap.data().data === 'string'){
+      // [하위 호환] 조각 방식 도입 직전의 "슬롯 문서 하나에 전체 데이터를 통째로 저장"하던 구조.
+      const entry = docSnap.data();
+      let parsedData = entry.data;
       try{ parsedData = JSON.parse(parsedData); }
-      catch(e3){ console.error('[cloudLoad] 데이터 파싱 실패', { slotId, error: e3, raw: entry.data }); return null; }
+      catch(e3){ console.error('[cloudLoad] 데이터 파싱 실패', { slotId, error: e3 }); return null; }
+      return { ok: true, data: parsedData, meta: { updatedAt: entry.updatedAt } };
     }
-    return { ok: true, data: parsedData, meta: { updatedAt: entry.updatedAt } };
+    // [하위 호환] 그보다 더 예전 구조(유저당 문서 1개에 모든 슬롯을 합쳐 저장)로 남아있던 데이터를
+    // 마지막 폴백으로 한 번 더 확인한다 (마이그레이션 이전에 저장된 계정을 위한 하위 호환).
+    const legacyDoc = await firebaseDb.collection('saves').doc(user.uid).get();
+    if(!legacyDoc.exists) return null;
+    const legacyAll = legacyDoc.data() || {};
+    const legacyEntry = legacyAll[slotId];
+    if(!legacyEntry) return null;
+    let legacyParsed = legacyEntry.data;
+    if(typeof legacyParsed === 'string'){
+      try{ legacyParsed = JSON.parse(legacyParsed); }
+      catch(e3){ console.error('[cloudLoad] 레거시 데이터 파싱 실패', { slotId, error: e3 }); return null; }
+    }
+    return { ok:true, data: legacyParsed, meta: { updatedAt: legacyEntry.updatedAt } };
   }catch(e){
     console.error('[cloudLoad] 예외 발생', { slotId, error: e });
     return null;
